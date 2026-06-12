@@ -24,6 +24,7 @@
         <nav class="rail-nav" aria-label="Workspace sections">
           <a class="rail-button active" href="#top" aria-label="Dashboard"><i data-lucide="layout-dashboard"></i></a>
           <a class="rail-button" href="#weather" aria-label="Weather"><i data-lucide="cloud-sun"></i></a>
+          <a class="rail-button" href="nws-weather-interface.html" aria-label="Forecast Engine"><i data-lucide="external-link"></i></a>
           <a class="rail-button" href="#feeds" aria-label="Data Feeds"><i data-lucide="activity"></i></a>
         </nav>
         <span class="rail-spacer" aria-hidden="true"></span>
@@ -60,6 +61,10 @@
             </div>
             <div class="canvas-actions">
               <span id="weatherUpdated" class="update-chip">Awaiting NWS</span>
+              <a class="launch-action" href="nws-weather-interface.html">
+                <i data-lucide="external-link"></i>
+                <span>Forecast Engine</span>
+              </a>
               <button id="refreshWeather" class="icon-action" type="button" aria-label="Refresh weather">
                 <i data-lucide="refresh-cw"></i>
               </button>
