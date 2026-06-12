@@ -154,7 +154,7 @@ function normalizeNwsUrl(value) {
 }
 
 function parseNwsFeatureFlags(value = "") {
-  return value
+  return String(value || "")
     .split(",")
     .map((flag) => flag.trim())
     .filter((flag) => NWS_FEATURE_FLAGS.has(flag));

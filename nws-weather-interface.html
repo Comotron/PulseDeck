@@ -269,7 +269,8 @@
   <script>
     const API_BASE_URL = "https://api.weather.gov";
     const GEOCODING_BASE_URL = "https://geocoding-api.open-meteo.com/v1/search";
-    const REQUIRED_USER_AGENT = "(myweatherapp.com, contact@myweatherapp.com)";
+    const NWS_FEATURE_FLAGS = ["forecast_temperature_qv"];
+    const NWS_SERVER_REQUIRED_MESSAGE = "Start the live hub server to enable NWS forecasts.";
     const ERROR_MESSAGE = "Rate limit reached or invalid coordinates. Please try again in 5 seconds.";
     const LOCATION_ERROR_MESSAGE = "Current location unavailable. Search by city or ZIP code instead.";
     const SEARCH_ERROR_MESSAGE = "Location not found. Try another city, state, or ZIP code.";
@@ -309,30 +310,31 @@
     const currentDetails = document.getElementById("currentDetails");
     const currentWind = document.getElementById("currentWind");
 
-    function buildNwsHeaders({ includeFeatureFlags = true } = {}) {
-      const headers = new Headers();
-      headers.set("Accept", "application/geo+json");
-
-      if (includeFeatureFlags) {
-        headers.set("Feature-Flags", "forecast_temperature_qv");
+    function buildNwsProxyUrl(url) {
+      if (window.location.protocol === "file:") {
+        throw new Error(NWS_SERVER_REQUIRED_MESSAGE);
       }
 
-      try {
-        headers.set("User-Agent", REQUIRED_USER_AGENT);
-      } catch {
-        console.info("The browser controls the User-Agent header for this request.");
+      const nwsUrl = new URL(url);
+
+      if (nwsUrl.origin !== API_BASE_URL) {
+        throw new Error("Unexpected NWS forecast URL.");
       }
 
-      return headers;
+      const params = new URLSearchParams({
+        url: nwsUrl.href,
+        featureFlags: NWS_FEATURE_FLAGS.join(",")
+      });
+
+      return `/api/nws?${params.toString()}`;
     }
 
-    async function fetchWithHeaders(url, headers) {
+    async function fetchWithTimeout(url) {
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), 15000);
 
       try {
         const response = await fetch(url, {
-          headers,
           signal: controller.signal,
           cache: "no-store"
         });
@@ -348,16 +350,7 @@
     }
 
     async function fetchJson(url) {
-      try {
-        return await fetchWithHeaders(url, buildNwsHeaders());
-      } catch (error) {
-        if (error instanceof TypeError) {
-          console.warn("NWS CORS blocked one of the requested headers in this browser. Retrying with browser-compatible headers.");
-          return await fetchWithHeaders(url, buildNwsHeaders({ includeFeatureFlags: false }));
-        }
-
-        throw error;
-      }
+      return fetchWithTimeout(buildNwsProxyUrl(url));
     }
 
     async function getForecast(latitude, longitude) {
@@ -655,7 +648,9 @@
       } catch (error) {
         console.warn(error);
         clearForecastResults();
-        showMessage(error.message.includes("city") || error.message.includes("matches") || error.message.includes("search")
+        showMessage(error.message === NWS_SERVER_REQUIRED_MESSAGE
+          ? NWS_SERVER_REQUIRED_MESSAGE
+          : error.message.includes("city") || error.message.includes("matches") || error.message.includes("search")
           ? SEARCH_ERROR_MESSAGE
           : ERROR_MESSAGE);
       } finally {
@@ -677,7 +672,9 @@
       } catch (error) {
         console.warn(error);
         clearForecastResults();
-        showMessage(error.name === "GeolocationPositionError" || error.message.includes("Geolocation")
+        showMessage(error.message === NWS_SERVER_REQUIRED_MESSAGE
+          ? NWS_SERVER_REQUIRED_MESSAGE
+          : error.name === "GeolocationPositionError" || error.message.includes("Geolocation")
           ? LOCATION_ERROR_MESSAGE
           : ERROR_MESSAGE);
       } finally {
