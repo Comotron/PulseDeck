@@ -1,5 +1,5 @@
 const NWS_API_ORIGIN = "https://api.weather.gov";
-const NWS_SERVER_REQUIRED_MESSAGE = "Start the live hub server to enable NWS forecasts.";
+const NWS_LOCAL_PROXY_ORIGIN = "http://localhost:8787";
 
 // Update cadence lives here so future widgets can tune refresh timing without touching render logic.
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
@@ -147,14 +147,21 @@ async function fetchNwsForecast(location) {
 }
 
 async function fetchNwsJson(url) {
-  return fetchJson(buildNwsProxyUrl(url));
+  const proxyUrl = buildNwsProxyUrl(url);
+  const localProxyUrl = buildNwsProxyUrl(url, { forceLocal: true });
+
+  try {
+    return await fetchJson(proxyUrl);
+  } catch (error) {
+    if (proxyUrl !== localProxyUrl && isMissingNwsProxy(error)) {
+      return fetchJson(localProxyUrl);
+    }
+
+    throw error;
+  }
 }
 
-function buildNwsProxyUrl(url) {
-  if (window.location.protocol === "file:") {
-    throw new Error(NWS_SERVER_REQUIRED_MESSAGE);
-  }
-
+function buildNwsProxyUrl(url, { forceLocal = false } = {}) {
   const nwsUrl = new URL(url);
 
   if (nwsUrl.origin !== NWS_API_ORIGIN) {
@@ -162,7 +169,17 @@ function buildNwsProxyUrl(url) {
   }
 
   const params = new URLSearchParams({ url: nwsUrl.href });
-  return `/api/nws?${params.toString()}`;
+  const proxyPath = `/api/nws?${params.toString()}`;
+
+  if (forceLocal || window.location.protocol === "file:") {
+    return `${NWS_LOCAL_PROXY_ORIGIN}${proxyPath}`;
+  }
+
+  return proxyPath;
+}
+
+function isMissingNwsProxy(error) {
+  return String(error?.message || "").includes("404");
 }
 
 async function fetchJson(url, headers = { "Accept": "application/json" }) {

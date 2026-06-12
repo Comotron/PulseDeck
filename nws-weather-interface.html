@@ -268,9 +268,9 @@
 
   <script>
     const API_BASE_URL = "https://api.weather.gov";
+    const NWS_LOCAL_PROXY_ORIGIN = "http://localhost:8787";
     const GEOCODING_BASE_URL = "https://geocoding-api.open-meteo.com/v1/search";
     const NWS_FEATURE_FLAGS = ["forecast_temperature_qv"];
-    const NWS_SERVER_REQUIRED_MESSAGE = "Start the live hub server to enable NWS forecasts.";
     const ERROR_MESSAGE = "Rate limit reached or invalid coordinates. Please try again in 5 seconds.";
     const LOCATION_ERROR_MESSAGE = "Current location unavailable. Search by city or ZIP code instead.";
     const SEARCH_ERROR_MESSAGE = "Location not found. Try another city, state, or ZIP code.";
@@ -310,11 +310,7 @@
     const currentDetails = document.getElementById("currentDetails");
     const currentWind = document.getElementById("currentWind");
 
-    function buildNwsProxyUrl(url) {
-      if (window.location.protocol === "file:") {
-        throw new Error(NWS_SERVER_REQUIRED_MESSAGE);
-      }
-
+    function buildNwsProxyUrl(url, { forceLocal = false } = {}) {
       const nwsUrl = new URL(url);
 
       if (nwsUrl.origin !== API_BASE_URL) {
@@ -326,7 +322,13 @@
         featureFlags: NWS_FEATURE_FLAGS.join(",")
       });
 
-      return `/api/nws?${params.toString()}`;
+      const proxyPath = `/api/nws?${params.toString()}`;
+
+      if (forceLocal || window.location.protocol === "file:") {
+        return `${NWS_LOCAL_PROXY_ORIGIN}${proxyPath}`;
+      }
+
+      return proxyPath;
     }
 
     async function fetchWithTimeout(url) {
@@ -350,7 +352,22 @@
     }
 
     async function fetchJson(url) {
-      return fetchWithTimeout(buildNwsProxyUrl(url));
+      const proxyUrl = buildNwsProxyUrl(url);
+      const localProxyUrl = buildNwsProxyUrl(url, { forceLocal: true });
+
+      try {
+        return await fetchWithTimeout(proxyUrl);
+      } catch (error) {
+        if (proxyUrl !== localProxyUrl && isMissingNwsProxy(error)) {
+          return fetchWithTimeout(localProxyUrl);
+        }
+
+        throw error;
+      }
+    }
+
+    function isMissingNwsProxy(error) {
+      return String(error?.message || "").includes("404");
     }
 
     async function getForecast(latitude, longitude) {
@@ -648,9 +665,7 @@
       } catch (error) {
         console.warn(error);
         clearForecastResults();
-        showMessage(error.message === NWS_SERVER_REQUIRED_MESSAGE
-          ? NWS_SERVER_REQUIRED_MESSAGE
-          : error.message.includes("city") || error.message.includes("matches") || error.message.includes("search")
+        showMessage(error.message.includes("city") || error.message.includes("matches") || error.message.includes("search")
           ? SEARCH_ERROR_MESSAGE
           : ERROR_MESSAGE);
       } finally {
@@ -672,9 +687,7 @@
       } catch (error) {
         console.warn(error);
         clearForecastResults();
-        showMessage(error.message === NWS_SERVER_REQUIRED_MESSAGE
-          ? NWS_SERVER_REQUIRED_MESSAGE
-          : error.name === "GeolocationPositionError" || error.message.includes("Geolocation")
+        showMessage(error.name === "GeolocationPositionError" || error.message.includes("Geolocation")
           ? LOCATION_ERROR_MESSAGE
           : ERROR_MESSAGE);
       } finally {
