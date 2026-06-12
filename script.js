@@ -1,8 +1,5 @@
-const NWS_USER_AGENT = "(PulseDeck, contact@example.com)";
-const NWS_HEADERS = {
-  "Accept": "application/geo+json",
-  "User-Agent": NWS_USER_AGENT
-};
+const NWS_API_ORIGIN = "https://api.weather.gov";
+const NWS_SERVER_REQUIRED_MESSAGE = "Start the live hub server to enable NWS forecasts.";
 
 // Update cadence lives here so future widgets can tune refresh timing without touching render logic.
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
@@ -131,15 +128,15 @@ async function loadWeatherCanvas() {
 }
 
 async function fetchNwsForecast(location) {
-  const pointUrl = `https://api.weather.gov/points/${location.lat},${location.lon}`;
-  const pointData = await fetchJson(pointUrl, NWS_HEADERS);
+  const pointUrl = `${NWS_API_ORIGIN}/points/${location.lat},${location.lon}`;
+  const pointData = await fetchNwsJson(pointUrl);
   const forecastUrl = pointData?.properties?.forecast;
 
   if (!forecastUrl) {
     throw new Error(`Forecast URL missing for ${location.city}`);
   }
 
-  const forecastData = await fetchJson(forecastUrl, NWS_HEADERS);
+  const forecastData = await fetchNwsJson(forecastUrl);
   const currentPeriod = forecastData?.properties?.periods?.[0];
 
   if (!currentPeriod) {
@@ -147,6 +144,25 @@ async function fetchNwsForecast(location) {
   }
 
   return currentPeriod;
+}
+
+async function fetchNwsJson(url) {
+  return fetchJson(buildNwsProxyUrl(url));
+}
+
+function buildNwsProxyUrl(url) {
+  if (window.location.protocol === "file:") {
+    throw new Error(NWS_SERVER_REQUIRED_MESSAGE);
+  }
+
+  const nwsUrl = new URL(url);
+
+  if (nwsUrl.origin !== NWS_API_ORIGIN) {
+    throw new Error("Unexpected NWS forecast URL.");
+  }
+
+  const params = new URLSearchParams({ url: nwsUrl.href });
+  return `/api/nws?${params.toString()}`;
 }
 
 async function fetchJson(url, headers = { "Accept": "application/json" }) {

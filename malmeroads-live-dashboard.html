@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MalmeRoads Corridor Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./malmeroads-live-dashboard.css" />
+  </head>
+  <body>
+    <div id="app" class="malme-app bg-mesh">
+      <header class="malme-header">
+        <div class="malme-header-inner">
+          <a class="nav-link" href="index.html#feeds" aria-label="Return to PulseDeck">
+            <i data-lucide="arrow-left" aria-hidden="true"></i>
+            <span>PulseDeck</span>
+          </a>
+
+          <div class="study-wordmark">
+            <div class="study-wordmark-icon">
+              <i data-lucide="train" aria-hidden="true"></i>
+            </div>
+            <div>
+              <p>FAY-CLT HSR Study</p>
+              <span>MalmeRoads live source redesign</span>
+            </div>
+          </div>
+
+          <nav class="source-nav" aria-label="Source navigation">
+            <button class="nav-link active" data-source-path="/" type="button">
+              <i data-lucide="home" aria-hidden="true"></i>
+              <span>Home</span>
+            </button>
+            <button class="nav-link" data-source-path="/i7374nc/index.html" type="button">
+              <i data-lucide="route" aria-hidden="true"></i>
+              <span>I-73/74</span>
+            </button>
+            <button class="nav-link" data-source-path="/ncfutints/index.html" type="button">
+              <i data-lucide="map" aria-hidden="true"></i>
+              <span>NC Futures</span>
+            </button>
+            <button class="nav-link" data-source-path="/mass21c/" type="button">
+              <i data-lucide="signpost" aria-hidden="true"></i>
+              <span>Mass.</span>
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      <main>
+        <section class="dashboard-section hero-section">
+          <div class="glass-strong glow-blue fade-in-up hero-panel">
+            <div class="hero-panel-grid">
+              <div>
+                <p class="eyebrow">Live corridor archive</p>
+                <h1 id="pageTitle" class="hero-gradient-text hero-title">
+                  MalmeRoads Corridor Intelligence
+                </h1>
+                <p id="pageSubtitle" class="hero-subtitle">
+                  A glassmorphism rebuild of the MalmeRoads highway archive, synchronized from the original source pages.
+                </p>
+                <div class="hero-actions">
+                  <a id="originalPageLink" class="pill-action" href="https://malmeroads.net/" target="_blank" rel="noopener noreferrer">
+                    <i data-lucide="external-link" aria-hidden="true"></i>
+                    <span>Original source</span>
+                  </a>
+                  <button id="refreshSourceButton" class="pill-action" type="button">
+                    <i data-lucide="refresh-cw" aria-hidden="true"></i>
+                    <span>Refresh source</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="sync-panel">
+                <p class="eyebrow">Sync telemetry</p>
+                <div class="sync-stack">
+                  <div class="sync-row">
+                    <span>Current path</span>
+                    <strong id="sourcePathLabel">/</strong>
+                  </div>
+                  <div class="sync-row">
+                    <span>Source status</span>
+                    <strong id="sourceStatusLabel">Connecting</strong>
+                  </div>
+                  <div class="sync-row">
+                    <span>Last checked</span>
+                    <strong id="sourceTimeLabel">--</strong>
+                  </div>
+                </div>
+                <p class="sync-note">
+                  Revalidates every 60 seconds on the server and refreshes this view in the background.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div id="heroMedia" class="hero-media-grid" aria-label="Source highway shields"></div>
+        </section>
+
+        <section class="dashboard-section">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Route channels</p>
+              <h2 class="section-title section-heading-title">Source Page Switchboard</h2>
+            </div>
+            <label class="search-control">
+              <span class="sr-only">Search rendered source content</span>
+              <i data-lucide="search" aria-hidden="true"></i>
+              <input id="sourceSearchInput" type="search" autocomplete="off" placeholder="Find in source" />
+            </label>
+          </div>
+
+          <div id="routeCards" class="route-card-grid"></div>
+        </section>
+
+        <section class="dashboard-section">
+          <div class="reader-layout">
+            <article class="glass rounded-3xl">
+              <div class="reader-header">
+                <p class="eyebrow">Rendered source</p>
+                <h2 id="sourceReaderTitle" class="section-title section-heading-title">Live Page</h2>
+                <p id="sourceReaderMeta">Waiting for source content.</p>
+              </div>
+              <div id="sourceContent" class="source-content" aria-live="polite">
+                <div class="empty-state">
+                  <i data-lucide="loader" aria-hidden="true"></i>
+                  <span>Loading MalmeRoads source...</span>
+                </div>
+              </div>
+            </article>
+
+            <aside class="reader-aside">
+              <article class="glass rounded-3xl aside-panel">
+                <p class="eyebrow">Latest update extraction</p>
+                <h2 class="section-title aside-title">Source Highlights</h2>
+                <div id="sourceHighlights" class="highlight-stack"></div>
+              </article>
+
+              <article class="glass glow-gold rounded-3xl aside-panel">
+                <p class="eyebrow">Transparency note</p>
+                <h2 class="aside-title no-marker">Not a forked archive</h2>
+                <p class="aside-copy">
+                  This page is a live presentation layer. It keeps original links, images, update text, and page paths connected to MalmeRoads.Net.
+                </p>
+              </article>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="./malmeroads-live-dashboard.js"></script>
+  </body>
+</html>

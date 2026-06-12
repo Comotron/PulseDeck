@@ -762,6 +762,15 @@ h1 {
     rgba(255, 255, 255, 0.05);
 }
 
+.malmeroads-widget {
+  grid-column: 1 / -1;
+  background:
+    radial-gradient(circle at 12% 22%, rgba(96, 165, 250, 0.14), transparent 30%),
+    radial-gradient(circle at 86% 16%, rgba(74, 222, 128, 0.1), transparent 32%),
+    rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.2), 0 0 80px rgba(59, 130, 246, 0.06);
+}
+
 .ncdot-widget-copy {
   max-width: 54rem;
   margin-bottom: 1rem;
@@ -769,7 +778,20 @@ h1 {
   line-height: 1.6;
 }
 
+.malmeroads-widget-copy {
+  max-width: 58rem;
+  margin-bottom: 1rem;
+  color: var(--body);
+  line-height: 1.6;
+}
+
 .ncdot-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.malmeroads-signal-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
@@ -787,13 +809,37 @@ h1 {
   border-radius: 0.75rem;
 }
 
+.malmeroads-signal-grid div {
+  min-height: 4.35rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.75rem;
+}
+
 .ncdot-signal-grid strong {
   color: var(--text);
   font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 1.05rem;
 }
 
+.malmeroads-signal-grid strong {
+  color: var(--text);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.05rem;
+}
+
 .ncdot-signal-grid span {
+  color: var(--secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.malmeroads-signal-grid span {
   color: var(--secondary);
   font-size: 0.75rem;
   font-weight: 600;
@@ -1736,7 +1782,8 @@ svg {
   .template-grid,
   .holdings-list,
   .market-summary-grid,
-  .ncdot-signal-grid {
+  .ncdot-signal-grid,
+  .malmeroads-signal-grid {
     grid-template-columns: 1fr;
   }
 
