@@ -17,9 +17,18 @@ const AVIATION_WEATHER_USER_AGENT = process.env.AVIATION_WEATHER_USER_AGENT || "
 const AVIATION_API_ORIGIN = "https://api.aviationapi.com";
 const AIRPORTS_API_ORIGIN = "https://airportsapi.com";
 const TRANSITLAND_ORIGIN = "https://transit.land";
+const BALLDONTLIE_ORIGIN = "https://api.balldontlie.io";
+const NBA_STATS_ORIGIN = "https://api.server.nbaapi.com";
+const OPENF1_ORIGIN = "https://api.openf1.org";
+const FPL_ORIGIN = "https://fantasy.premierleague.com";
 const AIRPORT_WEATHER_CACHE_MS = 60_000;
 const AIRPORT_META_CACHE_MS = 24 * 60 * 60 * 1000;
 const TRANSIT_CACHE_MS = 5 * 60 * 1000;
+const NBA_GAMES_CACHE_MS = 45_000;
+const NBA_STATS_CACHE_MS = 20 * 60 * 1000;
+const F1_LIVE_CACHE_MS = 60_000;
+const F1_OFFWEEK_CACHE_MS = 15 * 60 * 1000;
+const EPL_CACHE_MS = 20 * 60 * 1000;
 const TRAVEL_AIRPORT_IDS = ["KRDU", "KCLT", "KFAY", "KGSO"];
 const LOCAL_AIRPORTS = {
   KRDU: {
@@ -84,6 +93,7 @@ const malmeRoadsCache = new Map();
 const travelWeatherCache = new Map();
 const airportMetadataCache = new Map();
 const transitCache = new Map();
+const sportsCache = new Map();
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -123,6 +133,31 @@ const server = http.createServer(async (request, response) => {
 
     if (requestUrl.pathname === "/api/travel/transit") {
       await handleTravelTransit(requestUrl, response);
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/sports/nba/games") {
+      await handleSportsNbaGames(requestUrl, response);
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/sports/nba/stats") {
+      await handleSportsNbaStats(requestUrl, response);
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/sports/f1") {
+      await handleSportsF1(requestUrl, response);
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/sports/epl") {
+      await handleSportsEpl(requestUrl, response);
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/sports") {
+      await handleSports(requestUrl, response);
       return;
     }
 
@@ -269,6 +304,823 @@ async function handleTravelTransit(requestUrl, response) {
       providers: []
     });
   }
+}
+
+async function handleSports(requestUrl, response) {
+  const force = requestUrl.searchParams.get("force") === "1";
+  const payload = await loadSportsDashboard(force);
+  sendJson(response, 200, payload);
+}
+
+async function handleSportsNbaGames(requestUrl, response) {
+  const force = requestUrl.searchParams.get("force") === "1";
+  const payload = await loadNbaGames(force);
+  sendJson(response, 200, payload);
+}
+
+async function handleSportsNbaStats(requestUrl, response) {
+  const force = requestUrl.searchParams.get("force") === "1";
+  const payload = await loadNbaStats(force);
+  sendJson(response, 200, payload);
+}
+
+async function handleSportsF1(requestUrl, response) {
+  const force = requestUrl.searchParams.get("force") === "1";
+  const payload = await loadF1Signal(force);
+  sendJson(response, 200, payload);
+}
+
+async function handleSportsEpl(requestUrl, response) {
+  const force = requestUrl.searchParams.get("force") === "1";
+  const payload = await loadEplSignal(force);
+  sendJson(response, 200, payload);
+}
+
+async function loadSportsDashboard(force = false) {
+  const errors = [];
+  const [nbaGamesResult, nbaStatsResult, f1Result, eplResult] = await Promise.allSettled([
+    loadNbaGames(force),
+    loadNbaStats(force),
+    loadF1Signal(force),
+    loadEplSignal(force)
+  ]);
+  const nbaGames = unwrapSportsPayload(nbaGamesResult, "NBA games", errors, {
+    status: "error",
+    source: "balldontlie NBA API",
+    games: [],
+    message: "NBA games unavailable."
+  });
+  const nbaStats = unwrapSportsPayload(nbaStatsResult, "NBA Stats API", errors, {
+    status: "error",
+    source: "NBA Stats API",
+    signal: buildNbaSignalError(new Error("NBA stats unavailable."))
+  });
+  const f1 = unwrapSportsPayload(f1Result, "OpenF1 API", errors, {
+    status: "error",
+    source: "OpenF1 API",
+    signal: buildF1UnavailableSignal(new Error("F1 signal unavailable.")).signal
+  });
+  const epl = unwrapSportsPayload(eplResult, "FPL API", errors, {
+    status: "error",
+    source: "Fantasy Premier League API",
+    signal: buildEplUnavailableSignal(new Error("Premier League signal unavailable.")).signal
+  });
+  const providerErrors = [
+    ...(nbaGames.errors || []),
+    ...(nbaStats.errors || []),
+    ...(f1.errors || []),
+    ...(epl.errors || []),
+    ...errors
+  ];
+  const providers = {
+    nbaGames: summarizeSportsProvider(nbaGames),
+    nbaStats: summarizeSportsProvider(nbaStats),
+    f1: summarizeSportsProvider(f1),
+    epl: summarizeSportsProvider(epl)
+  };
+
+  return {
+    updatedAt: new Date().toISOString(),
+    status: resolveSportsStatus(providers, providerErrors),
+    refreshSeconds: 60,
+    nbaGames: nbaGames.games || [],
+    nbaSignal: nbaStats.signal || buildNbaSignalError(new Error("NBA stat signal unavailable.")),
+    f1Signal: f1.signal || buildF1UnavailableSignal(new Error("F1 signal unavailable.")).signal,
+    eplSignal: epl.signal || buildEplUnavailableSignal(new Error("Premier League signal unavailable.")).signal,
+    providers,
+    errors: providerErrors.slice(0, 6)
+  };
+}
+
+async function loadNbaGames(force = false) {
+  const apiKey = process.env.BALLDONTLIE_API_KEY;
+  const today = formatDateInTimeZone(new Date(), "America/New_York");
+
+  if (!apiKey) {
+    return {
+      updatedAt: new Date().toISOString(),
+      status: "needs_api_key",
+      source: "balldontlie NBA API",
+      needsApiKey: true,
+      games: [],
+      message: "Add BALLDONTLIE_API_KEY on the server to enable NBA Today."
+    };
+  }
+
+  try {
+    return await getSportsCached(`nba-games:${today}`, NBA_GAMES_CACHE_MS, force, async () => {
+      const endpoint = new URL("/v1/games", BALLDONTLIE_ORIGIN);
+      endpoint.searchParams.append("dates[]", today);
+      endpoint.searchParams.set("per_page", "25");
+
+      const payload = await fetchJsonWithTimeout(endpoint, {
+        headers: {
+          "Accept": "application/json",
+          "Authorization": apiKey,
+          "User-Agent": "PulseDeck Sports Pulse/1.0"
+        }
+      }, 8000);
+      const games = Array.isArray(payload?.data)
+        ? payload.data.map(normalizeBalldontlieGame)
+        : [];
+
+      return {
+        updatedAt: new Date().toISOString(),
+        status: "live",
+        source: "balldontlie NBA API",
+        date: today,
+        games,
+        message: games.length ? `${games.length} NBA game${games.length === 1 ? "" : "s"} tracked today.` : "No NBA games today."
+      };
+    });
+  } catch (error) {
+    return {
+      updatedAt: new Date().toISOString(),
+      status: "error",
+      source: "balldontlie NBA API",
+      date: today,
+      games: [],
+      message: error.message || "NBA games unavailable.",
+      errors: [{ source: "balldontlie NBA API", message: error.message || "NBA games unavailable." }]
+    };
+  }
+}
+
+async function loadNbaStats(force = false) {
+  const season = getCurrentNbaSeasonYear();
+
+  try {
+    return await getSportsCached(`nba-stats:${season}`, NBA_STATS_CACHE_MS, force, async () => {
+      let statsSeason = season;
+      let rows = await fetchNbaPlayerTotals(statsSeason);
+
+      if (!rows.length) {
+        statsSeason = season - 1;
+        rows = await fetchNbaPlayerTotals(statsSeason);
+      }
+
+      return {
+        updatedAt: new Date().toISOString(),
+        status: rows.length ? "live" : "empty",
+        source: "NBA Stats API",
+        season: statsSeason,
+        signal: normalizeNbaStatSignal(rows, statsSeason),
+        message: rows.length ? "NBA stat signal connected." : "NBA stat table returned no leaders."
+      };
+    });
+  } catch (error) {
+    return {
+      updatedAt: new Date().toISOString(),
+      status: "error",
+      source: "NBA Stats API",
+      season,
+      signal: buildNbaSignalError(error),
+      message: error.message || "NBA stat signal unavailable.",
+      errors: [{ source: "NBA Stats API", message: error.message || "NBA stat signal unavailable." }]
+    };
+  }
+}
+
+async function loadF1Signal(force = false) {
+  const cached = sportsCache.get("f1");
+  const ttl = cached?.data?.raceWeekend ? F1_LIVE_CACHE_MS : F1_OFFWEEK_CACHE_MS;
+
+  try {
+    return await getSportsCached("f1", ttl, force, async () => {
+      const sessions = await fetchOpenF1Json("/v1/sessions?session_key=latest", 8000);
+      const session = pickLatestOpenF1Session(sessions);
+
+      if (!session?.session_key) {
+        throw new Error("OpenF1 returned no latest session.");
+      }
+
+      const sessionKey = session.session_key;
+      const [results, drivers, positions, weather] = await Promise.allSettled([
+        fetchOpenF1Json(`/v1/session_result?session_key=${encodeURIComponent(sessionKey)}&position%3C=4`, 7000),
+        fetchOpenF1Json(`/v1/drivers?session_key=${encodeURIComponent(sessionKey)}`, 7000),
+        fetchOpenF1Json(`/v1/position?session_key=${encodeURIComponent(sessionKey)}`, 7000),
+        fetchOpenF1Json(`/v1/weather?session_key=${encodeURIComponent(sessionKey)}`, 7000)
+      ]);
+      const driverMap = buildOpenF1DriverMap(getSettledArray(drivers));
+      const topRows = normalizeOpenF1Results(getSettledArray(results), driverMap);
+      const latestPositions = normalizeOpenF1Positions(getSettledArray(positions), driverMap);
+      const signalRows = topRows.length ? topRows : latestPositions;
+      const raceWeekend = isRaceWeekendSession(session);
+      const weatherPoint = normalizeOpenF1Weather(getLatestDatedRecord(getSettledArray(weather)));
+
+      return {
+        updatedAt: new Date().toISOString(),
+        status: "live",
+        source: "OpenF1 API",
+        raceWeekend,
+        signal: {
+          status: "live",
+          label: raceWeekend ? "Live" : "Historical",
+          isHistorical: !raceWeekend,
+          meetingName: formatF1MeetingName(session),
+          sessionName: session.session_name || session.session_type || "F1 session",
+          circuit: session.circuit_short_name || session.location || null,
+          topDriver: signalRows[0] || null,
+          positions: signalRows.slice(0, 3),
+          weather: weatherPoint,
+          detail: signalRows.length ? "Latest session signal from OpenF1." : "Session found; timing signal pending."
+        },
+        message: raceWeekend ? "OpenF1 race weekend signal connected." : "OpenF1 historical signal connected."
+      };
+    });
+  } catch (error) {
+    return buildF1UnavailableSignal(error);
+  }
+}
+
+async function loadEplSignal(force = false) {
+  try {
+    return await getSportsCached("epl-fpl", EPL_CACHE_MS, force, async () => {
+      const [bootstrap, futureFixtures] = await Promise.all([
+        fetchFplJson("/api/bootstrap-static/", 9000),
+        fetchFplJson("/api/fixtures/?future=1", 9000).catch(() => [])
+      ]);
+      let fixtures = Array.isArray(futureFixtures) ? futureFixtures : [];
+
+      if (!fixtures.length) {
+        const allFixtures = await fetchFplJson("/api/fixtures/", 9000).catch(() => []);
+        fixtures = Array.isArray(allFixtures) ? allFixtures : [];
+      }
+
+      return {
+        updatedAt: new Date().toISOString(),
+        status: "live",
+        source: "Fantasy Premier League API",
+        signal: normalizeEplSignal(bootstrap, fixtures),
+        message: "Premier League / FPL signal connected."
+      };
+    });
+  } catch (error) {
+    return buildEplUnavailableSignal(error);
+  }
+}
+
+async function getSportsCached(key, ttlMs, force, loader) {
+  const cached = sportsCache.get(key);
+  const now = Date.now();
+
+  if (cached && !force && now - cached.createdAt < ttlMs) {
+    return attachSportsCacheMeta(cached.data, "fresh", cached.createdAt);
+  }
+
+  try {
+    const loaded = await loader();
+    const createdAt = Date.now();
+
+    sportsCache.set(key, {
+      createdAt,
+      data: loaded
+    });
+
+    return attachSportsCacheMeta(loaded, cached ? "updated" : "miss", createdAt);
+  } catch (error) {
+    if (cached) {
+      return attachSportsCacheMeta(cached.data, "stale", cached.createdAt, error);
+    }
+
+    throw error;
+  }
+}
+
+function attachSportsCacheMeta(data, status, createdAt, error = null) {
+  const errors = error
+    ? [...(data.errors || []), { source: data.source || "Sports provider", message: error.message || "Provider refresh failed." }]
+    : data.errors || [];
+
+  return {
+    ...data,
+    status: status === "stale" ? "cached" : data.status,
+    cache: {
+      ...(data.cache || {}),
+      status,
+      ageSeconds: Math.max(0, Math.round((Date.now() - createdAt) / 1000)),
+      message: error?.message || null
+    },
+    errors
+  };
+}
+
+function unwrapSportsPayload(result, label, errors, fallback) {
+  if (result.status === "fulfilled") {
+    return result.value;
+  }
+
+  errors.push({
+    source: label,
+    message: result.reason?.message || `${label} unavailable.`
+  });
+
+  return fallback;
+}
+
+function summarizeSportsProvider(payload) {
+  return {
+    status: payload.status || "unknown",
+    source: payload.source || null,
+    message: payload.message || null,
+    needsApiKey: Boolean(payload.needsApiKey),
+    cache: payload.cache || null
+  };
+}
+
+function resolveSportsStatus(providers, errors) {
+  if (providers.nbaGames?.needsApiKey) {
+    return "needs_api_key";
+  }
+
+  if (Object.values(providers).some((provider) => provider?.cache?.status === "stale" || provider?.status === "cached")) {
+    return "cached";
+  }
+
+  if (errors.length) {
+    return "cached";
+  }
+
+  return "live";
+}
+
+function normalizeBalldontlieGame(game) {
+  const awayScore = numberOrNull(game.visitor_team_score);
+  const homeScore = numberOrNull(game.home_team_score);
+  const leader = getGameLeader(awayScore, homeScore, game.status);
+  const status = normalizeNbaGameStatus(game);
+
+  return {
+    id: game.id,
+    date: game.date || null,
+    startsAt: game.datetime || null,
+    status,
+    rawStatus: game.status || null,
+    period: numberOrNull(game.period),
+    clock: String(game.time || "").trim() || null,
+    postponed: Boolean(game.postponed),
+    away: {
+      id: game.visitor_team?.id || null,
+      abbreviation: game.visitor_team?.abbreviation || "AWY",
+      name: game.visitor_team?.full_name || game.visitor_team?.name || "Away",
+      score: awayScore,
+      isLeader: leader === "away"
+    },
+    home: {
+      id: game.home_team?.id || null,
+      abbreviation: game.home_team?.abbreviation || "HOME",
+      name: game.home_team?.full_name || game.home_team?.name || "Home",
+      score: homeScore,
+      isLeader: leader === "home"
+    },
+    leader,
+    tone: status.tone
+  };
+}
+
+function normalizeNbaGameStatus(game) {
+  const rawStatus = String(game.status || "").trim();
+  const period = Number(game.period);
+
+  if (game.postponed) {
+    return { label: "Delayed", detail: "Postponed", tone: "negative", isLive: false, isFinal: false };
+  }
+
+  if (/final/i.test(rawStatus)) {
+    return { label: "Final", detail: "Final", tone: "final", isLive: false, isFinal: true };
+  }
+
+  if (/half/i.test(rawStatus)) {
+    return { label: "Halftime", detail: "Halftime", tone: "warning", isLive: true, isFinal: false };
+  }
+
+  if (/qtr|quarter|1st|2nd|3rd|4th/i.test(rawStatus) || (Number.isFinite(period) && period > 0 && period < 5)) {
+    return {
+      label: Number.isFinite(period) && period > 0 ? `Q${period}` : rawStatus,
+      detail: String(game.time || "").trim() || rawStatus,
+      tone: "live",
+      isLive: true,
+      isFinal: false
+    };
+  }
+
+  return {
+    label: rawStatus || "Scheduled",
+    detail: game.datetime ? formatShortDateTime(game.datetime) : rawStatus || "Scheduled",
+    tone: "scheduled",
+    isLive: false,
+    isFinal: false
+  };
+}
+
+function getGameLeader(awayScore, homeScore, status) {
+  if (!Number.isFinite(awayScore) || !Number.isFinite(homeScore) || !/final|qtr|half|quarter|1st|2nd|3rd|4th/i.test(String(status || ""))) {
+    return null;
+  }
+
+  if (awayScore === homeScore) {
+    return "tie";
+  }
+
+  return awayScore > homeScore ? "away" : "home";
+}
+
+async function fetchNbaPlayerTotals(season) {
+  const endpoint = new URL("/api/playertotals", NBA_STATS_ORIGIN);
+  endpoint.searchParams.set("season", String(season));
+  endpoint.searchParams.set("page", "1");
+  endpoint.searchParams.set("pageSize", "8");
+  endpoint.searchParams.set("sortBy", "points");
+  endpoint.searchParams.set("ascending", "false");
+  endpoint.searchParams.set("isPlayoff", "false");
+
+  const payload = await fetchJsonWithTimeout(endpoint, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "PulseDeck Sports Pulse/1.0"
+    }
+  }, 9000);
+
+  return Array.isArray(payload?.data) ? payload.data : [];
+}
+
+function normalizeNbaStatSignal(rows, season) {
+  const leaders = rows
+    .filter((row) => row?.playerName)
+    .map((row) => {
+      const games = numberOrNull(row.games);
+      const points = numberOrNull(row.points);
+      const ppg = Number.isFinite(points) && Number.isFinite(games) && games > 0 ? points / games : null;
+
+      return {
+        playerName: row.playerName,
+        team: row.team || "--",
+        position: row.position || "--",
+        games,
+        points,
+        ppg,
+        assists: numberOrNull(row.assists),
+        rebounds: numberOrNull(row.totalRb),
+        statLine: `${formatOneDecimal(ppg)} PPG`
+      };
+    });
+  const top = leaders[0];
+
+  if (!top) {
+    return {
+      status: "empty",
+      label: "NBA Stat Signal",
+      headline: "Leaders pending",
+      season,
+      leaders: [],
+      detail: "No player total rows returned."
+    };
+  }
+
+  return {
+    status: "live",
+    label: "Top scorer",
+    headline: `${top.playerName} ${formatOneDecimal(top.ppg)} PPG`,
+    season,
+    statLabel: "Season points",
+    statValue: Number.isFinite(top.points) ? Math.round(top.points).toLocaleString("en-US") : "--",
+    detail: `${top.team} / ${Number.isFinite(top.games) ? `${top.games} GP` : "Games pending"}`,
+    leaders: leaders.slice(0, 4)
+  };
+}
+
+function buildNbaSignalError(error) {
+  return {
+    status: "error",
+    label: "NBA Stat Signal",
+    headline: "Stats offline",
+    season: getCurrentNbaSeasonYear(),
+    leaders: [],
+    detail: error.message || "NBA stats unavailable."
+  };
+}
+
+async function fetchOpenF1Json(pathname, timeoutMs = 8000) {
+  const endpoint = new URL(pathname, OPENF1_ORIGIN);
+  const headers = {
+    "Accept": "application/json",
+    "User-Agent": "PulseDeck Sports Pulse/1.0"
+  };
+
+  if (process.env.OPENF1_API_KEY) {
+    headers.Authorization = `Bearer ${process.env.OPENF1_API_KEY}`;
+  }
+
+  return fetchJsonWithTimeout(endpoint, { headers }, timeoutMs);
+}
+
+function pickLatestOpenF1Session(sessions) {
+  return (Array.isArray(sessions) ? sessions : [])
+    .filter((session) => session?.session_key)
+    .sort((a, b) => new Date(b.date_start || 0) - new Date(a.date_start || 0))[0] || null;
+}
+
+function buildOpenF1DriverMap(drivers) {
+  return new Map((Array.isArray(drivers) ? drivers : []).map((driver) => [
+    Number(driver.driver_number),
+    {
+      number: Number(driver.driver_number),
+      abbreviation: driver.name_acronym || driver.broadcast_name || String(driver.driver_number),
+      name: driver.full_name || driver.broadcast_name || `Driver ${driver.driver_number}`,
+      team: driver.team_name || "Team pending"
+    }
+  ]));
+}
+
+function normalizeOpenF1Results(rows, driverMap) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => Number.isFinite(Number(row.position)))
+    .sort((a, b) => Number(a.position) - Number(b.position))
+    .map((row) => normalizeOpenF1Standing(row, driverMap));
+}
+
+function normalizeOpenF1Positions(rows, driverMap) {
+  const latestByDriver = new Map();
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const driverNumber = Number(row.driver_number);
+    const previous = latestByDriver.get(driverNumber);
+
+    if (!previous || new Date(row.date || 0) > new Date(previous.date || 0)) {
+      latestByDriver.set(driverNumber, row);
+    }
+  });
+
+  return [...latestByDriver.values()]
+    .filter((row) => Number.isFinite(Number(row.position)))
+    .sort((a, b) => Number(a.position) - Number(b.position))
+    .map((row) => normalizeOpenF1Standing(row, driverMap));
+}
+
+function normalizeOpenF1Standing(row, driverMap) {
+  const driverNumber = Number(row.driver_number);
+  const driver = driverMap.get(driverNumber) || {
+    number: driverNumber,
+    abbreviation: String(driverNumber),
+    name: `Driver ${driverNumber}`,
+    team: "Team pending"
+  };
+
+  return {
+    position: numberOrNull(row.position),
+    driver,
+    gap: formatF1Gap(row.gap_to_leader),
+    laps: numberOrNull(row.number_of_laps),
+    duration: normalizeF1Duration(row.duration)
+  };
+}
+
+function normalizeOpenF1Weather(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    airTempC: numberOrNull(row.air_temperature),
+    trackTempC: numberOrNull(row.track_temperature),
+    rainfall: numberOrNull(row.rainfall),
+    humidity: numberOrNull(row.humidity),
+    windSpeed: numberOrNull(row.wind_speed)
+  };
+}
+
+function buildF1UnavailableSignal(error) {
+  return {
+    updatedAt: new Date().toISOString(),
+    status: "error",
+    source: "OpenF1 API",
+    raceWeekend: false,
+    signal: {
+      status: "historical",
+      label: "Historical",
+      isHistorical: true,
+      meetingName: "F1 signal pending",
+      sessionName: "OpenF1 unavailable",
+      circuit: null,
+      topDriver: null,
+      positions: [],
+      weather: null,
+      detail: error.message || "OpenF1 data unavailable."
+    },
+    message: error.message || "OpenF1 data unavailable.",
+    errors: [{ source: "OpenF1 API", message: error.message || "OpenF1 data unavailable." }]
+  };
+}
+
+async function fetchFplJson(pathname, timeoutMs = 9000) {
+  const endpoint = new URL(pathname, FPL_ORIGIN);
+  return fetchJsonWithTimeout(endpoint, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "PulseDeck Sports Pulse/1.0"
+    }
+  }, timeoutMs);
+}
+
+function normalizeEplSignal(bootstrap, fixtures) {
+  const teams = new Map((bootstrap?.teams || []).map((team) => [
+    team.id,
+    {
+      name: team.name,
+      shortName: team.short_name || team.name
+    }
+  ]));
+  const positions = new Map((bootstrap?.element_types || []).map((type) => [type.id, type.singular_name_short || type.singular_name]));
+  const events = Array.isArray(bootstrap?.events) ? bootstrap.events : [];
+  const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
+  const now = Date.now();
+  const current = events.find((event) => event.is_current)
+    || events.find((event) => !event.finished && new Date(event.deadline_time).getTime() >= now)
+    || [...events].reverse().find((event) => event.finished)
+    || events[0]
+    || null;
+  const next = events.find((event) => event.is_next)
+    || events.find((event) => !event.finished && new Date(event.deadline_time).getTime() >= now)
+    || null;
+  const topPlayer = normalizeFplTopPlayer(elements, teams, positions);
+  const fixtureSignal = normalizeFplFixtures(fixtures, teams);
+
+  return {
+    status: "live",
+    label: "Premier League / FPL",
+    gameweek: current?.id || next?.id || null,
+    gameweekLabel: current ? `GW ${current.id}` : next ? `GW ${next.id}` : "Gameweek pending",
+    gameweekStatus: current?.finished ? "Complete" : current?.is_current ? "Current" : next ? "Next" : "Pending",
+    deadline: next?.deadline_time || current?.deadline_time || null,
+    topPlayer,
+    fixtures: fixtureSignal.fixtures,
+    fixtureMode: fixtureSignal.mode,
+    detail: fixtureSignal.fixtures.length ? `${fixtureSignal.mode} fixtures loaded.` : "Fixtures pending."
+  };
+}
+
+function normalizeFplTopPlayer(elements, teams, positions) {
+  const player = [...elements]
+    .filter((element) => element?.web_name)
+    .sort((a, b) => Number(b.total_points || 0) - Number(a.total_points || 0))[0];
+
+  if (!player) {
+    return {
+      name: "Player signal pending",
+      team: "--",
+      position: "--",
+      points: null,
+      form: null,
+      selectedByPercent: null
+    };
+  }
+
+  return {
+    name: player.web_name,
+    fullName: `${player.first_name || ""} ${player.second_name || ""}`.trim() || player.web_name,
+    team: teams.get(player.team)?.shortName || "--",
+    position: positions.get(player.element_type) || "--",
+    points: numberOrNull(player.total_points),
+    form: numberOrNull(player.form),
+    selectedByPercent: numberOrNull(player.selected_by_percent)
+  };
+}
+
+function normalizeFplFixtures(fixtures, teams) {
+  const now = Date.now();
+  const allFixtures = Array.isArray(fixtures) ? fixtures : [];
+  const upcoming = allFixtures
+    .filter((fixture) => fixture.kickoff_time && new Date(fixture.kickoff_time).getTime() >= now)
+    .sort((a, b) => new Date(a.kickoff_time) - new Date(b.kickoff_time));
+  const recent = allFixtures
+    .filter((fixture) => fixture.kickoff_time && new Date(fixture.kickoff_time).getTime() < now)
+    .sort((a, b) => new Date(b.kickoff_time) - new Date(a.kickoff_time));
+  const picked = upcoming.length ? upcoming.slice(0, 3) : recent.slice(0, 3);
+
+  return {
+    mode: upcoming.length ? "Upcoming" : picked.length ? "Recent" : "Pending",
+    fixtures: picked.map((fixture) => ({
+      id: fixture.id,
+      kickoff: fixture.kickoff_time || null,
+      status: fixture.finished ? "Final" : fixture.started ? "Live" : "Scheduled",
+      home: teams.get(fixture.team_h)?.shortName || `Team ${fixture.team_h}`,
+      away: teams.get(fixture.team_a)?.shortName || `Team ${fixture.team_a}`,
+      homeScore: numberOrNull(fixture.team_h_score),
+      awayScore: numberOrNull(fixture.team_a_score),
+      difficulty: Math.max(Number(fixture.team_h_difficulty || 0), Number(fixture.team_a_difficulty || 0)) || null
+    }))
+  };
+}
+
+function buildEplUnavailableSignal(error) {
+  return {
+    updatedAt: new Date().toISOString(),
+    status: "error",
+    source: "Fantasy Premier League API",
+    signal: {
+      status: "error",
+      label: "Premier League / FPL",
+      gameweek: null,
+      gameweekLabel: "Gameweek pending",
+      gameweekStatus: "Offline",
+      topPlayer: null,
+      fixtures: [],
+      fixtureMode: "Pending",
+      detail: error.message || "FPL data unavailable."
+    },
+    message: error.message || "FPL data unavailable.",
+    errors: [{ source: "Fantasy Premier League API", message: error.message || "FPL data unavailable." }]
+  };
+}
+
+function getSettledArray(result) {
+  return result.status === "fulfilled" && Array.isArray(result.value) ? result.value : [];
+}
+
+function getLatestDatedRecord(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.date)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+}
+
+function getCurrentNbaSeasonYear() {
+  const now = new Date();
+  return now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear();
+}
+
+function formatDateInTimeZone(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function formatShortDateTime(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Scheduled";
+  }
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short"
+  });
+}
+
+function formatOneDecimal(value) {
+  return Number.isFinite(value) ? value.toFixed(1) : "--";
+}
+
+function formatF1MeetingName(session = {}) {
+  if (session.meeting_name) {
+    return session.meeting_name;
+  }
+
+  if (session.country_name) {
+    return `${session.country_name} Grand Prix`;
+  }
+
+  return session.location || "Formula 1";
+}
+
+function isRaceWeekendSession(session = {}) {
+  const start = new Date(session.date_start || 0).getTime();
+  const end = new Date(session.date_end || session.date_start || 0).getTime();
+  const now = Date.now();
+  const margin = 3 * 24 * 60 * 60 * 1000;
+
+  return Number.isFinite(start) && Number.isFinite(end) && now >= start - margin && now <= end + margin;
+}
+
+function formatF1Gap(value) {
+  if (Array.isArray(value)) {
+    return formatF1Gap(value.filter((item) => item !== null && item !== undefined).at(-1));
+  }
+
+  if (value === null || value === undefined || value === 0) {
+    return "Leader";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return Number.isFinite(Number(value)) ? `+${Number(value).toFixed(3)}s` : "--";
+}
+
+function normalizeF1Duration(value) {
+  if (Array.isArray(value)) {
+    return normalizeF1Duration(value.filter((item) => item !== null && item !== undefined).at(-1));
+  }
+
+  return numberOrNull(value);
 }
 
 async function loadTravelAirportPulse(force = false) {
