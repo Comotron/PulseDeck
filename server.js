@@ -468,6 +468,567 @@ function parseNwsFeatureFlags(value = "") {
     .filter((flag) => NWS_FEATURE_FLAGS.has(flag));
 }
 
+async function fetchAviationWeatherProduct(product) {
+  const productPath = product === "taf" ? "taf" : "metar";
+  const endpoint = `${AVIATION_WEATHER_ORIGIN}/api/data/${productPath}?ids=${TRAVEL_AIRPORT_IDS.join(",")}&format=json`;
+  const payload = await fetchJsonWithTimeout(endpoint, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": AVIATION_WEATHER_USER_AGENT
+    }
+  });
+
+  if (!Array.isArray(payload)) {
+    throw new Error(`AviationWeather ${productPath.toUpperCase()} response was not a list.`);
+  }
+
+  return payload;
+}
+
+async function fetchAviationWeatherAirports() {
+  const endpoint = `${AVIATION_WEATHER_ORIGIN}/api/data/airport?ids=${TRAVEL_AIRPORT_IDS.join(",")}&format=json`;
+  const payload = await fetchJsonWithTimeout(endpoint, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": AVIATION_WEATHER_USER_AGENT
+    }
+  });
+
+  if (!Array.isArray(payload)) {
+    throw new Error("AviationWeather airport response was not a list.");
+  }
+
+  return payload.map((airport) => ({
+    icao: airport.icaoId,
+    iata: airport.iataId,
+    faa: airport.faaId,
+    name: cleanAirportName(airport.name),
+    state: airport.state,
+    lat: airport.lat,
+    lon: airport.lon,
+    elevationFt: metersToFeet(airport.elev),
+    runways: Array.isArray(airport.runways) ? airport.runways : [],
+    source: "AviationWeather"
+  }));
+}
+
+async function fetchAviationApiAirports() {
+  const endpoint = `${AVIATION_API_ORIGIN}/v1/airports?apt=${TRAVEL_AIRPORT_IDS.join(",")}`;
+  const response = await fetchWithTimeout(endpoint, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": AVIATION_WEATHER_USER_AGENT
+    }
+  }, 3500);
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!response.ok || !contentType.includes("json")) {
+    throw new Error("AviationAPI airport data unavailable.");
+  }
+
+  const payload = await response.json();
+  const records = Array.isArray(payload)
+    ? payload
+    : Object.entries(payload || {}).map(([icao, value]) => ({ icao, ...value }));
+
+  return records
+    .map((airport) => ({
+      icao: String(airport.icao || airport.icaoId || airport.ident || airport.id || "").toUpperCase(),
+      iata: airport.iata || airport.iataId,
+      faa: airport.faa || airport.faaId,
+      name: cleanAirportName(airport.name || airport.facility_name || airport.airport_name),
+      lat: Number(airport.lat || airport.latitude),
+      lon: Number(airport.lon || airport.longitude),
+      source: "AviationAPI"
+    }))
+    .filter((airport) => TRAVEL_AIRPORT_IDS.includes(airport.icao));
+}
+
+async function fetchAirportsApiMetadata() {
+  const results = await Promise.allSettled(
+    TRAVEL_AIRPORT_IDS.map(async (icao) => {
+      const endpoint = `${AIRPORTS_API_ORIGIN}/api/airports/${encodeURIComponent(icao)}`;
+      const payload = await fetchJsonWithTimeout(endpoint, {
+        headers: {
+          "Accept": "application/vnd.api+json, application/json",
+          "User-Agent": AVIATION_WEATHER_USER_AGENT
+        }
+      }, 4500);
+      const attributes = payload?.data?.attributes || {};
+
+      return {
+        icao,
+        iata: attributes.iata_code,
+        name: cleanAirportName(attributes.name),
+        lat: Number(attributes.latitude),
+        lon: Number(attributes.longitude),
+        elevationFt: Number(attributes.elevation),
+        type: attributes.type,
+        source: "airportsapi"
+      };
+    })
+  );
+
+  return results
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+}
+
+async function fetchTransitLandFeeds(apiKey, airport) {
+  const endpoint = new URL("/api/v2/rest/feeds", TRANSITLAND_ORIGIN);
+  endpoint.searchParams.set("lat", String(airport.lat));
+  endpoint.searchParams.set("lon", String(airport.lon));
+  endpoint.searchParams.set("radius", "35000");
+  endpoint.searchParams.set("limit", "4");
+
+  const payload = await fetchJsonWithTimeout(endpoint, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "PulseDeck Transit Pulse/1.0",
+      "apikey": apiKey
+    }
+  }, 8000);
+  const feeds = payload?.feeds || payload?.data || [];
+
+  if (!Array.isArray(feeds)) {
+    return [];
+  }
+
+  return feeds.slice(0, 4).map((feed) => ({
+    name: feed.name || feed.feed_name || feed.onestop_id || feed.id || "Transit feed",
+    onestopId: feed.onestop_id || feed.id,
+    spec: feed.spec || feed.feed_format || "GTFS",
+    updatedAt: feed.updated_at || feed.last_successful_fetch_at || feed.imported_at || null
+  }));
+}
+
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const response = await fetchWithTimeout(url, options, timeoutMs);
+
+  if (!response.ok) {
+    throw new Error(`${new URL(url).hostname} returned ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      redirect: "follow"
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function buildLocalAirportMetadata() {
+  return {
+    airports: Object.fromEntries(TRAVEL_AIRPORT_IDS.map((icao) => [icao, getLocalAirport(icao)])),
+    sources: ["Local airport metadata"],
+    optional: {
+      aviationWeather: "unavailable",
+      aviationApi: "unavailable",
+      airportsapi: "unavailable"
+    }
+  };
+}
+
+function getLocalAirport(icao) {
+  return { ...LOCAL_AIRPORTS[icao] };
+}
+
+function mergeAirportMetadata(airports, records, source) {
+  records.forEach((record) => {
+    if (!record?.icao || !airports[record.icao]) {
+      return;
+    }
+
+    airports[record.icao] = {
+      ...airports[record.icao],
+      ...removeEmptyValues(record),
+      city: airports[record.icao].city,
+      state: record.state || airports[record.icao].state,
+      source
+    };
+  });
+}
+
+function normalizeAirportPulse({ icao, metadata, metar, taf, metarError, tafError }) {
+  const airport = metadata || getLocalAirport(icao);
+  const currentTaf = getRelevantTafPeriod(taf);
+  const metarVisibility = parseVisibilityMiles(metar?.visib);
+  const tafVisibility = parseVisibilityMiles(currentTaf?.visib);
+  const metarCeiling = getCeiling(metar?.clouds, metar?.vertVis);
+  const tafCeiling = getCeiling(currentTaf?.clouds, currentTaf?.vertVis);
+  const flightCategory = normalizeFlightCategory(metar?.fltCat)
+    || deriveFlightCategory(metarVisibility ?? tafVisibility, metarCeiling?.feet ?? tafCeiling?.feet)
+    || "Unknown";
+  const risk = scoreAirportRisk({
+    flightCategory,
+    metar,
+    taf,
+    currentTaf,
+    visibilityMiles: metarVisibility ?? tafVisibility,
+    ceilingFeet: metarCeiling?.feet ?? tafCeiling?.feet
+  });
+  const observedAt = metar?.reportTime || unixSecondsToIso(metar?.obsTime);
+  const hasMetar = Boolean(metar);
+  const hasTaf = Boolean(taf);
+
+  return {
+    icao,
+    iata: airport.iata || icao.replace(/^K/, ""),
+    faa: airport.faa || airport.iata || icao.replace(/^K/, ""),
+    city: airport.city,
+    state: airport.state || "NC",
+    name: airport.name,
+    lat: airport.lat,
+    lon: airport.lon,
+    flightCategory,
+    observedAt,
+    tempC: numberOrNull(metar?.temp),
+    tempF: celsiusToFahrenheit(metar?.temp),
+    wind: normalizeWind(metar || currentTaf),
+    visibility: {
+      miles: metarVisibility,
+      text: formatVisibility(metar?.visib, metarVisibility)
+    },
+    ceiling: {
+      feet: metarCeiling?.feet ?? null,
+      text: formatCeiling(metarCeiling)
+    },
+    taf: {
+      issuedAt: taf?.issueTime || null,
+      summary: summarizeTaf(taf),
+      raw: taf?.rawTAF || null
+    },
+    risk,
+    rawMetar: metar?.rawOb || null,
+    error: hasMetar
+      ? null
+      : metarError?.message || "METAR unavailable for this airport.",
+    forecastError: hasTaf
+      ? null
+      : tafError?.message || "TAF unavailable for this airport."
+  };
+}
+
+function buildAirportSummary(airports) {
+  const ranked = airports
+    .filter((airport) => !airport.error || airport.flightCategory !== "Unknown")
+    .sort((a, b) => a.risk.level - b.risk.level || categoryRank(a.flightCategory) - categoryRank(b.flightCategory));
+  const highest = [...airports].sort((a, b) => b.risk.level - a.risk.level)[0];
+  const best = ranked[0] || airports[0];
+
+  return {
+    bestAirport: summarizeAirportSignal(best),
+    highestRisk: summarizeAirportSignal(highest),
+    airportsTracked: airports.length
+  };
+}
+
+function summarizeAirportSignal(airport) {
+  if (!airport) {
+    return {
+      iata: "--",
+      icao: "--",
+      label: "No signal",
+      riskLabel: "Unknown",
+      riskLevel: 1,
+      tone: "unknown"
+    };
+  }
+
+  return {
+    iata: airport.iata,
+    icao: airport.icao,
+    city: airport.city,
+    label: `${airport.iata} ${airport.risk.label}`,
+    riskLabel: airport.risk.label,
+    riskLevel: airport.risk.level,
+    tone: airport.risk.tone
+  };
+}
+
+function scoreAirportRisk({ flightCategory, metar, taf, currentTaf, visibilityMiles, ceilingFeet }) {
+  let score = {
+    VFR: 0,
+    MVFR: 1,
+    IFR: 2,
+    LIFR: 3
+  }[flightCategory] ?? 1;
+  const reasons = [flightCategory === "Unknown" ? "Category pending" : flightCategory];
+  const gust = Number(metar?.wgst ?? currentTaf?.wgst);
+  const sustained = Number(metar?.wspd ?? currentTaf?.wspd);
+
+  if (Number.isFinite(gust) && gust >= 35) {
+    score += 2;
+    reasons.push(`Gusts ${gust} kt`);
+  } else if ((Number.isFinite(gust) && gust >= 25) || (Number.isFinite(sustained) && sustained >= 25)) {
+    score += 1;
+    reasons.push(`Wind ${Math.max(gust || 0, sustained || 0)} kt`);
+  }
+
+  if (Number.isFinite(visibilityMiles) && visibilityMiles < 3) {
+    score += 2;
+    reasons.push(`Visibility ${visibilityMiles} mi`);
+  } else if (Number.isFinite(visibilityMiles) && visibilityMiles < 5) {
+    score += 1;
+    reasons.push(`Visibility ${visibilityMiles} mi`);
+  }
+
+  if (Number.isFinite(ceilingFeet) && ceilingFeet < 500) {
+    score += 2;
+    reasons.push(`Ceiling ${ceilingFeet} ft`);
+  } else if (Number.isFinite(ceilingFeet) && ceilingFeet < 1000) {
+    score += 1;
+    reasons.push(`Ceiling ${ceilingFeet} ft`);
+  }
+
+  if (hasThunderstormSignal(metar?.rawOb || metar?.wxString)) {
+    score += 2;
+    reasons.push("Thunderstorm in METAR");
+  } else if (hasThunderstormSignal(taf?.rawTAF) || hasThunderstormSignal(currentTaf?.wxString) || hasCbCloud(currentTaf?.clouds)) {
+    score += 1;
+    reasons.push("Storm risk in TAF");
+  }
+
+  const level = Math.max(0, Math.min(3, score));
+  const labels = ["Clear", "Watch", "Delay Risk", "Ground Risk"];
+  const tones = ["clear", "watch", "delay", "ground"];
+
+  return {
+    level,
+    label: labels[level],
+    tone: tones[level],
+    reasons: [...new Set(reasons)].slice(0, 4)
+  };
+}
+
+function summarizeTaf(taf) {
+  if (!taf?.fcsts?.length) {
+    return "Forecast pending.";
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const relevant = taf.fcsts.find((period) => period.timeFrom <= now && now < period.timeTo)
+    || taf.fcsts.find((period) => period.timeFrom >= now)
+    || taf.fcsts[0];
+  const stormPeriod = taf.fcsts.find((period) => (
+    period.timeFrom >= now - 1800
+    && period.timeFrom <= now + 12 * 60 * 60
+    && (hasThunderstormSignal(period.wxString) || hasCbCloud(period.clouds))
+  ));
+  const period = stormPeriod || relevant;
+  const parts = [
+    formatTafWindow(period),
+    period.probability ? `${period.probability}% chance` : null,
+    period.wxString || (hasCbCloud(period.clouds) ? "CB clouds" : "quiet weather"),
+    normalizeWind(period).text,
+    formatVisibility(period.visib, parseVisibilityMiles(period.visib)),
+    formatCeiling(getCeiling(period.clouds, period.vertVis))
+  ].filter(Boolean);
+
+  return parts.join(" · ");
+}
+
+function getRelevantTafPeriod(taf) {
+  const now = Math.floor(Date.now() / 1000);
+  return taf?.fcsts?.find((period) => period.timeFrom <= now && now < period.timeTo)
+    || taf?.fcsts?.find((period) => period.timeFrom >= now)
+    || taf?.fcsts?.[0]
+    || null;
+}
+
+function normalizeFlightCategory(value) {
+  const category = String(value || "").trim().toUpperCase();
+  return ["VFR", "MVFR", "IFR", "LIFR"].includes(category) ? category : null;
+}
+
+function deriveFlightCategory(visibilityMiles, ceilingFeet) {
+  if (!Number.isFinite(visibilityMiles) && !Number.isFinite(ceilingFeet)) {
+    return null;
+  }
+
+  if ((Number.isFinite(ceilingFeet) && ceilingFeet < 500) || (Number.isFinite(visibilityMiles) && visibilityMiles < 1)) {
+    return "LIFR";
+  }
+
+  if ((Number.isFinite(ceilingFeet) && ceilingFeet < 1000) || (Number.isFinite(visibilityMiles) && visibilityMiles < 3)) {
+    return "IFR";
+  }
+
+  if ((Number.isFinite(ceilingFeet) && ceilingFeet <= 3000) || (Number.isFinite(visibilityMiles) && visibilityMiles <= 5)) {
+    return "MVFR";
+  }
+
+  return "VFR";
+}
+
+function categoryRank(category) {
+  return {
+    VFR: 0,
+    MVFR: 1,
+    IFR: 2,
+    LIFR: 3,
+    Unknown: 4
+  }[category] ?? 4;
+}
+
+function parseVisibilityMiles(value) {
+  if (Number.isFinite(value)) {
+    return Number(value);
+  }
+
+  const text = String(value || "").replace(/[+SM]/gi, "").trim();
+
+  if (!text) {
+    return null;
+  }
+
+  if (text.includes("/")) {
+    const pieces = text.split(/\s+/);
+    const whole = Number(pieces.length > 1 ? pieces[0] : 0);
+    const fraction = pieces[pieces.length - 1].split("/");
+    const numerator = Number(fraction[0]);
+    const denominator = Number(fraction[1]);
+
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+      return Number(((Number.isFinite(whole) ? whole : 0) + numerator / denominator).toFixed(2));
+    }
+  }
+
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getCeiling(clouds = [], verticalVisibility) {
+  if (Number.isFinite(verticalVisibility)) {
+    return {
+      cover: "VV",
+      feet: Number(verticalVisibility)
+    };
+  }
+
+  const ceilingCloud = (Array.isArray(clouds) ? clouds : [])
+    .filter((cloud) => ["BKN", "OVC", "OVX", "VV"].includes(String(cloud.cover || "").toUpperCase()))
+    .sort((a, b) => Number(a.base || Infinity) - Number(b.base || Infinity))[0];
+
+  if (!ceilingCloud || !Number.isFinite(Number(ceilingCloud.base))) {
+    return null;
+  }
+
+  return {
+    cover: String(ceilingCloud.cover || "").toUpperCase(),
+    feet: Number(ceilingCloud.base)
+  };
+}
+
+function normalizeWind(source = {}) {
+  const speed = numberOrNull(source.wspd);
+  const gust = numberOrNull(source.wgst);
+  const direction = source.wdir === "VRB" ? "VRB" : numberOrNull(source.wdir);
+  const directionText = direction === "VRB"
+    ? "VRB"
+    : Number.isFinite(direction)
+      ? `${direction}\u00b0`
+      : "Calm";
+
+  if (!Number.isFinite(speed) || speed === 0) {
+    return {
+      direction,
+      speedKt: speed || 0,
+      gustKt: gust,
+      text: "Calm"
+    };
+  }
+
+  return {
+    direction,
+    speedKt: speed,
+    gustKt: gust,
+    text: `${directionText} ${speed} kt${Number.isFinite(gust) ? ` G${gust}` : ""}`
+  };
+}
+
+function formatVisibility(original, miles) {
+  if (!Number.isFinite(miles)) {
+    return "Visibility pending";
+  }
+
+  const hasPlus = String(original || "").includes("+");
+  return `${miles}${hasPlus ? "+" : ""} mi`;
+}
+
+function formatCeiling(ceiling) {
+  if (!ceiling?.feet) {
+    return "No ceiling";
+  }
+
+  return `${ceiling.cover} ${Math.round(ceiling.feet).toLocaleString()} ft`;
+}
+
+function formatTafWindow(period) {
+  if (!period?.timeFrom) {
+    return "Next TAF";
+  }
+
+  return `From ${new Date(period.timeFrom * 1000).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit"
+  })}`;
+}
+
+function hasThunderstormSignal(value = "") {
+  return /\b(?:TS|VCTS|TSRA|\+TSRA|-TSRA)\b/i.test(String(value || ""));
+}
+
+function hasCbCloud(clouds = []) {
+  return (Array.isArray(clouds) ? clouds : []).some((cloud) => String(cloud.type || "").toUpperCase() === "CB");
+}
+
+function celsiusToFahrenheit(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round((numeric * 9) / 5 + 32) : null;
+}
+
+function metersToFeet(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric * 3.28084) : null;
+}
+
+function numberOrNull(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function unixSecondsToIso(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? new Date(numeric * 1000).toISOString() : null;
+}
+
+function cleanAirportName(value = "") {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/^([^/]+)\/([^/]+)\//, "")
+    .trim();
+}
+
+function removeEmptyValues(record) {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => (
+    value !== null
+    && value !== undefined
+    && value !== ""
+    && !Number.isNaN(value)
+  )));
+}
+
 function normalizeMalmeRoadsPath(value) {
   let nextValue = value || "/";
 

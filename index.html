@@ -27,6 +27,7 @@
           <a class="rail-button" href="nws-weather-interface.html" aria-label="Forecast Engine"><i data-lucide="external-link"></i></a>
           <a class="rail-button" href="ncdot-progress-dashboard.html" aria-label="NCDOT Progress"><i data-lucide="hard-hat"></i></a>
           <a class="rail-button" href="malmeroads-live-dashboard.html" aria-label="MalmeRoads"><i data-lucide="map"></i></a>
+          <a class="rail-button" href="#travel" aria-label="Travel"><i data-lucide="plane"></i></a>
           <a class="rail-button" href="#feeds" aria-label="Data Feeds"><i data-lucide="activity"></i></a>
         </nav>
         <span class="rail-spacer" aria-hidden="true"></span>
@@ -132,6 +133,129 @@
             <div>
               <p class="eyebrow">Live signals</p>
               <h2 id="feeds-title" class="section-title">Market & Route Pulse</h2>
+            </div>
+          </div>
+
+          <div id="travel" class="travel-module" aria-labelledby="travel-title">
+            <div class="travel-heading">
+              <div>
+                <p class="eyebrow">Travel conditions</p>
+                <h3 id="travel-title">Travel &amp; Airport Pulse</h3>
+              </div>
+              <div class="travel-actions">
+                <span id="travelUpdated" class="update-chip">Awaiting airports</span>
+                <button id="refreshTravel" class="icon-action" type="button" aria-label="Refresh travel">
+                  <i data-lucide="refresh-cw"></i>
+                </button>
+                <span id="travelFeedDot" class="status-dot warning"></span>
+              </div>
+            </div>
+
+            <div id="travelSummary" class="travel-summary-strip" aria-live="polite">
+              <div class="travel-summary-item">
+                <span>Best airport</span>
+                <strong>Connecting</strong>
+              </div>
+              <div class="travel-summary-item">
+                <span>Highest risk</span>
+                <strong>--</strong>
+              </div>
+              <div class="travel-summary-item">
+                <span>Network</span>
+                <strong>4 airports tracked</strong>
+              </div>
+              <div class="travel-summary-item">
+                <span>Updated</span>
+                <strong>--</strong>
+              </div>
+            </div>
+
+            <div id="airportPulseGrid" class="airport-grid" aria-live="polite">
+              <article class="glass airport-card loading" data-airport="RDU">
+                <div class="airport-card-top">
+                  <div>
+                    <div class="airport-code-row"><strong>RDU</strong><span>KRDU</span></div>
+                    <p>Raleigh-Durham</p>
+                  </div>
+                  <span class="risk-chip risk-watch">Loading</span>
+                </div>
+                <div class="flight-category-row">
+                  <span>Flight category</span>
+                  <strong>Unknown</strong>
+                </div>
+                <dl class="airport-metrics">
+                  <div><dt>Temp</dt><dd>--</dd></div>
+                  <div><dt>Wind</dt><dd>--</dd></div>
+                  <div><dt>Visibility</dt><dd>--</dd></div>
+                  <div><dt>Ceiling</dt><dd>--</dd></div>
+                </dl>
+                <p class="taf-summary">TAF pending.</p>
+              </article>
+              <article class="glass airport-card loading" data-airport="CLT">
+                <div class="airport-card-top">
+                  <div>
+                    <div class="airport-code-row"><strong>CLT</strong><span>KCLT</span></div>
+                    <p>Charlotte</p>
+                  </div>
+                  <span class="risk-chip risk-watch">Loading</span>
+                </div>
+                <div class="flight-category-row">
+                  <span>Flight category</span>
+                  <strong>Unknown</strong>
+                </div>
+                <dl class="airport-metrics">
+                  <div><dt>Temp</dt><dd>--</dd></div>
+                  <div><dt>Wind</dt><dd>--</dd></div>
+                  <div><dt>Visibility</dt><dd>--</dd></div>
+                  <div><dt>Ceiling</dt><dd>--</dd></div>
+                </dl>
+                <p class="taf-summary">TAF pending.</p>
+              </article>
+              <article class="glass airport-card loading" data-airport="FAY">
+                <div class="airport-card-top">
+                  <div>
+                    <div class="airport-code-row"><strong>FAY</strong><span>KFAY</span></div>
+                    <p>Fayetteville</p>
+                  </div>
+                  <span class="risk-chip risk-watch">Loading</span>
+                </div>
+                <div class="flight-category-row">
+                  <span>Flight category</span>
+                  <strong>Unknown</strong>
+                </div>
+                <dl class="airport-metrics">
+                  <div><dt>Temp</dt><dd>--</dd></div>
+                  <div><dt>Wind</dt><dd>--</dd></div>
+                  <div><dt>Visibility</dt><dd>--</dd></div>
+                  <div><dt>Ceiling</dt><dd>--</dd></div>
+                </dl>
+                <p class="taf-summary">TAF pending.</p>
+              </article>
+              <article class="glass airport-card loading" data-airport="GSO">
+                <div class="airport-card-top">
+                  <div>
+                    <div class="airport-code-row"><strong>GSO</strong><span>KGSO</span></div>
+                    <p>Greensboro</p>
+                  </div>
+                  <span class="risk-chip risk-watch">Loading</span>
+                </div>
+                <div class="flight-category-row">
+                  <span>Flight category</span>
+                  <strong>Unknown</strong>
+                </div>
+                <dl class="airport-metrics">
+                  <div><dt>Temp</dt><dd>--</dd></div>
+                  <div><dt>Wind</dt><dd>--</dd></div>
+                  <div><dt>Visibility</dt><dd>--</dd></div>
+                  <div><dt>Ceiling</dt><dd>--</dd></div>
+                </dl>
+                <p class="taf-summary">TAF pending.</p>
+              </article>
+            </div>
+
+            <div id="transitPulse" class="transit-pulse is-disabled" aria-live="polite">
+              <i data-lucide="train-front" aria-hidden="true"></i>
+              <span>Transit data not connected.</span>
             </div>
           </div>
 

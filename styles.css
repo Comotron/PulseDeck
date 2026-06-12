@@ -1226,6 +1226,371 @@ h1 {
   color: var(--body);
 }
 
+#travel {
+  scroll-margin-top: 6rem;
+}
+
+.travel-module {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.travel-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.travel-heading h3 {
+  margin-bottom: 0;
+  color: var(--text);
+  font-size: 1.35rem;
+}
+
+.travel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.travel-actions .update-chip {
+  min-width: 8.75rem;
+  justify-content: center;
+}
+
+.travel-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.travel-summary-item {
+  min-width: 0;
+  min-height: 4.35rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.85rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.75rem;
+}
+
+.travel-summary-item span,
+.airport-card-top p,
+.airport-metrics dt,
+.airport-observed,
+.airport-alert,
+.transit-pulse {
+  color: var(--secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.travel-summary-item strong {
+  min-width: 0;
+  color: var(--text);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.travel-summary-item.risk-clear {
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(52, 211, 153, 0.07);
+}
+
+.travel-summary-item.risk-watch {
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.07);
+}
+
+.travel-summary-item.risk-delay {
+  border-color: rgba(251, 146, 60, 0.26);
+  background: rgba(251, 146, 60, 0.08);
+}
+
+.travel-summary-item.risk-ground {
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.airport-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.airport-card {
+  position: relative;
+  min-width: 0;
+  min-height: 18.75rem;
+  display: grid;
+  align-content: start;
+  gap: 0.85rem;
+  overflow: hidden;
+  padding: 1rem;
+  border-radius: 1.25rem;
+  transition: 0.25s ease;
+}
+
+.airport-card::before {
+  content: "";
+  position: absolute;
+  inset: -32% -32% auto auto;
+  width: 10rem;
+  height: 10rem;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(96, 165, 250, 0.14), transparent 62%);
+}
+
+.airport-card.loading {
+  opacity: 0.78;
+}
+
+.airport-card.risk-clear {
+  border-color: rgba(52, 211, 153, 0.3);
+  box-shadow: inset 0 1px 24px rgba(52, 211, 153, 0.06);
+}
+
+.airport-card.risk-clear::before {
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.16), transparent 62%);
+}
+
+.airport-card.risk-watch {
+  border-color: rgba(251, 191, 36, 0.3);
+  box-shadow: inset 0 1px 24px rgba(251, 191, 36, 0.06);
+}
+
+.airport-card.risk-watch::before {
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.15), transparent 62%);
+}
+
+.airport-card.risk-delay {
+  border-color: rgba(251, 146, 60, 0.34);
+  box-shadow: inset 0 1px 24px rgba(251, 146, 60, 0.07);
+}
+
+.airport-card.risk-delay::before {
+  background: radial-gradient(circle, rgba(251, 146, 60, 0.16), transparent 62%);
+}
+
+.airport-card.risk-ground {
+  border-color: rgba(248, 113, 113, 0.34);
+  box-shadow: inset 0 1px 24px rgba(248, 113, 113, 0.07);
+}
+
+.airport-card.risk-ground::before {
+  background: radial-gradient(circle, rgba(248, 113, 113, 0.16), transparent 62%);
+}
+
+.airport-card-top,
+.flight-category-row {
+  position: relative;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.airport-card-top > div {
+  min-width: 0;
+}
+
+.airport-card-top p {
+  margin: 0.25rem 0 0;
+  line-height: 1.25;
+}
+
+.airport-code-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.airport-code-row strong {
+  color: var(--text);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.airport-code-row span {
+  min-width: 0;
+  color: var(--muted);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.risk-chip {
+  flex: 0 0 auto;
+  min-height: 1.7rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.55rem;
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.risk-chip.risk-clear {
+  color: #bbf7d0;
+  background: rgba(52, 211, 153, 0.13);
+  border-color: rgba(52, 211, 153, 0.28);
+}
+
+.risk-chip.risk-watch {
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.13);
+  border-color: rgba(251, 191, 36, 0.28);
+}
+
+.risk-chip.risk-delay {
+  color: #fed7aa;
+  background: rgba(251, 146, 60, 0.14);
+  border-color: rgba(251, 146, 60, 0.3);
+}
+
+.risk-chip.risk-ground {
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.32);
+}
+
+.flight-category-row {
+  align-items: center;
+  padding-top: 0.1rem;
+}
+
+.flight-category-row span {
+  color: var(--secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.flight-category-row strong {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+}
+
+.flight-vfr {
+  color: var(--green);
+}
+
+.flight-mvfr {
+  color: var(--amber);
+}
+
+.flight-ifr {
+  color: var(--orange);
+}
+
+.flight-lifr {
+  color: var(--critical);
+}
+
+.flight-unknown {
+  color: var(--secondary);
+}
+
+.airport-metrics {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0;
+  padding: 0.85rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.airport-metrics div {
+  min-width: 0;
+}
+
+.airport-metrics dt {
+  margin-bottom: 0.25rem;
+}
+
+.airport-metrics dd {
+  margin: 0;
+  color: var(--text);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.taf-summary {
+  position: relative;
+  display: -webkit-box;
+  min-height: 2.85rem;
+  margin: 0;
+  overflow: hidden;
+  color: var(--body);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.airport-observed,
+.airport-alert {
+  position: relative;
+  margin: 0;
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+}
+
+.airport-alert {
+  color: var(--critical);
+}
+
+.transit-pulse {
+  min-height: 2.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.75rem;
+}
+
+.transit-pulse svg {
+  flex: 0 0 auto;
+  color: var(--cyan);
+}
+
+.transit-pulse span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.transit-pulse.is-disabled svg {
+  color: var(--secondary);
+}
+
+.transit-pulse.is-error {
+  color: var(--critical);
+  border-color: rgba(248, 113, 113, 0.22);
+  background: rgba(248, 113, 113, 0.07);
+}
+
+.transit-pulse.is-connected {
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(52, 211, 153, 0.07);
+}
+
 .progress-track {
   height: 0.55rem;
   margin-top: 0.8rem;
@@ -1740,6 +2105,11 @@ svg {
     grid-template-columns: 1fr;
   }
 
+  .travel-summary-strip,
+  .airport-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .control-board {
     min-height: 0;
   }
@@ -1814,6 +2184,16 @@ svg {
     flex-direction: column;
   }
 
+  .travel-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .travel-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .canvas-actions {
     justify-content: space-between;
   }
@@ -1827,6 +2207,8 @@ svg {
   }
 
   .feed-grid,
+  .travel-summary-strip,
+  .airport-grid,
   .research-form,
   .template-grid,
   .holdings-list,
@@ -1859,18 +2241,21 @@ svg {
 
   .side-rail {
     gap: 0.35rem;
-    padding: 0.6rem;
+    padding: 0.55rem;
   }
 
   .rail-nav {
-    gap: 0.3rem;
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    gap: 0.24rem;
   }
 
   .brand-mark,
   .rail-button,
   .rail-spacer {
-    width: 2.85rem;
-    height: 2.85rem;
+    width: 2.55rem;
+    height: 2.55rem;
   }
 
   .rail-spacer {
@@ -1878,12 +2263,27 @@ svg {
   }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 480px) {
   .side-rail {
     justify-content: center;
   }
 
   .brand-mark {
     display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .side-rail {
+    padding: 0.45rem;
+  }
+
+  .rail-nav {
+    gap: 0.18rem;
+  }
+
+  .rail-button {
+    width: 2.35rem;
+    height: 2.35rem;
   }
 }

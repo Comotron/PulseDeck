@@ -4,6 +4,7 @@ const NWS_LOCAL_PROXY_ORIGIN = "http://localhost:8787";
 // Update cadence lives here so future widgets can tune refresh timing without touching render logic.
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 const MARKET_REFRESH_MS = 60 * 1000;
+const TRAVEL_REFRESH_MS = 60 * 1000;
 
 const weatherLocations = [
   { city: "Benson", state: "NC", lat: 35.3815, lon: -78.5486 },
@@ -27,6 +28,13 @@ const routeStatuses = [
   { label: "I-40 / Raleigh", status: "Clear", tone: "positive" },
   { label: "I-95 / Fayetteville", status: "Watch", tone: "warning" },
   { label: "CLT access", status: "Normal", tone: "positive" }
+];
+
+const travelAirportFallbacks = [
+  { icao: "KRDU", iata: "RDU", city: "Raleigh-Durham" },
+  { icao: "KCLT", iata: "CLT", city: "Charlotte" },
+  { icao: "KFAY", iata: "FAY", city: "Fayetteville" },
+  { icao: "KGSO", iata: "GSO", city: "Greensboro" }
 ];
 
 const skyIcons = {
@@ -62,12 +70,20 @@ const marketFeedDot = document.querySelector("#marketFeedDot");
 const marketSummary = document.querySelector("#marketSummary");
 const marketPulseList = document.querySelector("#marketPulseList");
 const routeStatusList = document.querySelector("#routeStatusList");
+const travelUpdated = document.querySelector("#travelUpdated");
+const refreshTravelButton = document.querySelector("#refreshTravel");
+const travelFeedDot = document.querySelector("#travelFeedDot");
+const travelSummary = document.querySelector("#travelSummary");
+const airportPulseGrid = document.querySelector("#airportPulseGrid");
+const transitPulse = document.querySelector("#transitPulse");
 
 let marketRequestInFlight = false;
+let travelRequestInFlight = false;
 
 function initDashboard() {
   initClock();
   initWeatherCanvas();
+  initTravelPulse();
   initMarketPulse();
   initRouteMonitor();
   refreshIcons();
@@ -242,6 +258,246 @@ function getWeatherSkin(shortForecast = "", iconUrl = "") {
   }
 
   return { className: "is-cloudy", icon: skyIcons.cloudy };
+}
+
+function initTravelPulse() {
+  if (!travelUpdated || !refreshTravelButton || !airportPulseGrid) {
+    return;
+  }
+
+  refreshTravelButton.addEventListener("click", () => loadTravelPulse(true));
+  loadTravelPulse();
+  setInterval(loadTravelPulse, TRAVEL_REFRESH_MS);
+}
+
+async function loadTravelPulse(force = false) {
+  if (travelRequestInFlight) {
+    return;
+  }
+
+  travelRequestInFlight = true;
+  setTravelLoadingState(true);
+
+  try {
+    if (window.location.protocol === "file:") {
+      throw new Error("Start the live hub server to enable airport weather.");
+    }
+
+    const cacheParam = force ? "?force=1" : "";
+    const [airportResult, transitResult] = await Promise.allSettled([
+      fetchJson(`/api/travel/airports${cacheParam}`),
+      fetchJson(`/api/travel/transit${cacheParam}`)
+    ]);
+
+    if (airportResult.status === "fulfilled") {
+      renderTravelPulse(airportResult.value);
+    } else {
+      renderTravelError(airportResult.reason);
+    }
+
+    if (transitResult.status === "fulfilled") {
+      renderTransitPulse(transitResult.value);
+    } else {
+      renderTransitPulse({
+        status: "error",
+        message: transitResult.reason?.message || "Transit status unavailable."
+      });
+    }
+  } catch (error) {
+    renderTravelError(error);
+    renderTransitPulse({
+      status: "disabled",
+      message: "Transit data not connected."
+    });
+  } finally {
+    travelRequestInFlight = false;
+    setTravelLoadingState(false);
+  }
+}
+
+function renderTravelPulse(data) {
+  const airports = Array.isArray(data.airports) ? data.airports : [];
+  travelSummary.innerHTML = renderTravelSummary(data, airports);
+  airportPulseGrid.innerHTML = airports.length
+    ? airports.map((airport) => renderAirportCard(airport)).join("")
+    : travelAirportFallbacks.map((airport) => renderAirportCard({
+      ...airport,
+      flightCategory: "Unknown",
+      risk: { label: "Watch", tone: "watch", level: 1, reasons: ["No airport feed"] },
+      error: "Airport feed returned no tracked airports."
+    })).join("");
+
+  travelUpdated.textContent = `Updated ${formatTravelTime(data.asOf)}`;
+  travelFeedDot.className = getTravelDotClass(data.summary?.highestRisk?.tone);
+  refreshIcons();
+}
+
+function renderTravelSummary(data, airports) {
+  const summary = data.summary || {};
+  const updated = formatTravelTime(data.asOf);
+  const tracked = summary.airportsTracked || airports.length || travelAirportFallbacks.length;
+  const best = summary.bestAirport?.label || "No signal";
+  const highest = summary.highestRisk?.label || "No signal";
+
+  return `
+    <div class="travel-summary-item risk-${getRiskTone(summary.bestAirport?.tone)}">
+      <span>Best airport</span>
+      <strong>${escapeHtml(best)}</strong>
+    </div>
+    <div class="travel-summary-item risk-${getRiskTone(summary.highestRisk?.tone)}">
+      <span>Highest risk</span>
+      <strong>${escapeHtml(highest)}</strong>
+    </div>
+    <div class="travel-summary-item">
+      <span>Network</span>
+      <strong>${tracked} airports tracked</strong>
+    </div>
+    <div class="travel-summary-item">
+      <span>Updated</span>
+      <strong>${escapeHtml(updated)}</strong>
+    </div>
+  `;
+}
+
+function renderAirportCard(airport) {
+  const riskTone = getRiskTone(airport.risk?.tone);
+  const category = airport.flightCategory || "Unknown";
+  const airportError = airport.error || airport.forecastError;
+  const observed = airport.observedAt ? `METAR ${formatTravelTime(airport.observedAt)}` : "METAR pending";
+  const reasons = Array.isArray(airport.risk?.reasons) ? airport.risk.reasons.join(" / ") : "";
+
+  return `
+    <article class="glass airport-card risk-${riskTone}${airportError ? " has-alert" : ""}" data-airport="${escapeHtml(airport.iata || airport.icao)}">
+      <div class="airport-card-top">
+        <div>
+          <div class="airport-code-row">
+            <strong>${escapeHtml(airport.iata || "--")}</strong>
+            <span>${escapeHtml(airport.icao || "--")}</span>
+          </div>
+          <p>${escapeHtml(airport.city || airport.name || "Airport")}</p>
+        </div>
+        <span class="risk-chip risk-${riskTone}" title="${escapeHtml(reasons)}">${escapeHtml(airport.risk?.label || "Watch")}</span>
+      </div>
+      <div class="flight-category-row">
+        <span>Flight category</span>
+        <strong class="flight-${category.toLowerCase()}">${escapeHtml(category)}</strong>
+      </div>
+      <dl class="airport-metrics">
+        <div>
+          <dt>Temp</dt>
+          <dd>${formatAirportTemp(airport.tempF)}</dd>
+        </div>
+        <div>
+          <dt>Wind</dt>
+          <dd>${escapeHtml(airport.wind?.text || "--")}</dd>
+        </div>
+        <div>
+          <dt>Visibility</dt>
+          <dd>${escapeHtml(airport.visibility?.text || "--")}</dd>
+        </div>
+        <div>
+          <dt>Ceiling</dt>
+          <dd>${escapeHtml(airport.ceiling?.text || "--")}</dd>
+        </div>
+      </dl>
+      <p class="taf-summary">${escapeHtml(airport.taf?.summary || "Forecast pending.")}</p>
+      <p class="airport-observed">${escapeHtml(observed)}</p>
+      ${airportError ? `<p class="airport-alert">${escapeHtml(airportError)}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderTransitPulse(data) {
+  if (!transitPulse) {
+    return;
+  }
+
+  const status = data?.status || "disabled";
+  const providers = Array.isArray(data?.providers) ? data.providers.filter((provider) => provider.status === "connected") : [];
+  const providerText = providers.length
+    ? providers.slice(0, 3).map((provider) => provider.name).filter(Boolean).join(" / ")
+    : data?.message || "Transit data not connected.";
+  const icon = status === "connected" ? "train-front" : status === "error" ? "triangle-alert" : "plug-zap";
+
+  transitPulse.className = `transit-pulse is-${status}`;
+  transitPulse.innerHTML = `
+    <i data-lucide="${icon}" aria-hidden="true"></i>
+    <span>${escapeHtml(providerText || "Transit data not connected.")}</span>
+  `;
+  refreshIcons();
+}
+
+function renderTravelError(error) {
+  travelSummary.innerHTML = `
+    <div class="travel-summary-item risk-ground">
+      <span>Best airport</span>
+      <strong>Offline</strong>
+    </div>
+    <div class="travel-summary-item risk-ground">
+      <span>Highest risk</span>
+      <strong>No signal</strong>
+    </div>
+    <div class="travel-summary-item">
+      <span>Network</span>
+      <strong>4 airports tracked</strong>
+    </div>
+    <div class="travel-summary-item">
+      <span>Updated</span>
+      <strong>--</strong>
+    </div>
+  `;
+  airportPulseGrid.innerHTML = travelAirportFallbacks
+    .map((airport) => renderAirportCard({
+      ...airport,
+      flightCategory: "Unknown",
+      risk: { label: "Ground Risk", tone: "ground", level: 3, reasons: ["Airport feed offline"] },
+      error: error?.message || "Airport weather unavailable."
+    }))
+    .join("");
+  travelUpdated.textContent = "Airports offline";
+  travelFeedDot.className = "status-dot critical";
+  refreshIcons();
+}
+
+function setTravelLoadingState(isLoading) {
+  refreshTravelButton.disabled = isLoading;
+  refreshTravelButton.classList.toggle("is-loading", isLoading);
+  document.querySelectorAll(".airport-card").forEach((card) => {
+    card.classList.toggle("loading", isLoading);
+  });
+}
+
+function formatAirportTemp(value) {
+  return Number.isFinite(value) ? `${Math.round(value)}&deg;F` : "--";
+}
+
+function formatTravelTime(value) {
+  const date = new Date(value || Date.now());
+
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function getRiskTone(tone = "watch") {
+  return ["clear", "watch", "delay", "ground"].includes(tone) ? tone : "watch";
+}
+
+function getTravelDotClass(tone = "watch") {
+  if (tone === "ground") {
+    return "status-dot critical";
+  }
+
+  if (tone === "watch" || tone === "delay") {
+    return "status-dot warning";
+  }
+
+  return "status-dot";
 }
 
 function initMarketPulse() {
