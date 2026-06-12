@@ -106,10 +106,34 @@ const contentTypes = {
   ".svg": "image/svg+xml; charset=utf-8",
   ".ico": "image/x-icon"
 };
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Frame-Options": "SAMEORIGIN",
+  "Permissions-Policy": "camera=(), microphone=(), payment=(), usb=(), geolocation=(self)"
+};
+const CACHEABLE_STATIC_EXTENSIONS = new Set([".css", ".js", ".png", ".jpg", ".jpeg", ".svg", ".ico"]);
+const ALLOWED_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 const server = http.createServer(async (request, response) => {
   try {
     const requestUrl = new URL(request.url, `http://${request.headers.host}`);
+
+    if (!ALLOWED_METHODS.has(request.method)) {
+      sendText(response, 405, "Method not allowed", {
+        "Allow": "GET, HEAD, OPTIONS"
+      });
+      return;
+    }
+
+    if (request.method === "OPTIONS" && requestUrl.pathname !== "/api/nws") {
+      response.writeHead(204, {
+        ...SECURITY_HEADERS,
+        "Allow": "GET, HEAD, OPTIONS"
+      });
+      response.end();
+      return;
+    }
 
     if (requestUrl.pathname === "/api/quotes") {
       await handleQuotes(requestUrl, response);
@@ -161,7 +185,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    serveStaticFile(requestUrl.pathname, response);
+    serveStaticFile(requestUrl.pathname, request.method, response);
   } catch (error) {
     sendJson(response, 500, {
       error: "Server error",
@@ -222,7 +246,10 @@ async function handleMalmeRoadsSource(requestUrl, response) {
 
 async function handleNwsProxy(request, requestUrl, response) {
   if (request.method === "OPTIONS") {
-    response.writeHead(204, NWS_PROXY_HEADERS);
+    response.writeHead(204, {
+      ...SECURITY_HEADERS,
+      ...NWS_PROXY_HEADERS
+    });
     response.end();
     return;
   }
@@ -243,6 +270,7 @@ async function handleNwsProxy(request, requestUrl, response) {
     const body = await upstreamResponse.text();
 
     response.writeHead(upstreamResponse.status, {
+      ...SECURITY_HEADERS,
       "Content-Type": upstreamResponse.headers.get("content-type") || "application/geo+json; charset=utf-8",
       "Cache-Control": upstreamResponse.headers.get("cache-control") || "no-store",
       ...NWS_PROXY_HEADERS
@@ -2080,30 +2108,62 @@ function isWithin(timestamp, period) {
   return Boolean(period && timestamp >= period.start && timestamp <= period.end);
 }
 
-function serveStaticFile(pathname, response) {
-  const decodedPath = decodeURIComponent(pathname === "/" ? "/index.html" : pathname);
-  const filePath = path.resolve(ROOT, `.${decodedPath}`);
+function serveStaticFile(pathname, method, response) {
+  let decodedPath;
 
-  if (!filePath.startsWith(ROOT)) {
+  try {
+    decodedPath = decodeURIComponent(pathname === "/" ? "/index.html" : pathname);
+  } catch {
+    sendText(response, 400, "Bad request");
+    return;
+  }
+
+  if (decodedPath.includes("\0") || decodedPath.split(/[\\/]+/).some((segment) => segment.startsWith("."))) {
     sendText(response, 403, "Forbidden");
     return;
   }
 
-  fs.readFile(filePath, (error, contents) => {
-    if (error) {
+  const filePath = path.resolve(ROOT, `.${decodedPath}`);
+  const relativePath = path.relative(ROOT, filePath);
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    sendText(response, 403, "Forbidden");
+    return;
+  }
+
+  fs.stat(filePath, (statError, stats) => {
+    if (statError || !stats.isFile()) {
       sendText(response, 404, "Not found");
       return;
     }
 
-    response.writeHead(200, {
-      "Content-Type": contentTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream"
+    fs.readFile(filePath, (readError, contents) => {
+      if (readError) {
+        sendText(response, 404, "Not found");
+        return;
+      }
+
+      response.writeHead(200, getStaticHeaders(filePath));
+      response.end(method === "HEAD" ? undefined : contents);
     });
-    response.end(contents);
   });
+}
+
+function getStaticHeaders(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+
+  return {
+    ...SECURITY_HEADERS,
+    "Content-Type": contentTypes[extension] || "application/octet-stream",
+    "Cache-Control": CACHEABLE_STATIC_EXTENSIONS.has(extension)
+      ? "public, max-age=3600"
+      : "no-cache"
+  };
 }
 
 function sendJson(response, statusCode, body, extraHeaders = {}) {
   response.writeHead(statusCode, {
+    ...SECURITY_HEADERS,
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     ...extraHeaders
@@ -2111,9 +2171,12 @@ function sendJson(response, statusCode, body, extraHeaders = {}) {
   response.end(JSON.stringify(body));
 }
 
-function sendText(response, statusCode, body) {
+function sendText(response, statusCode, body, extraHeaders = {}) {
   response.writeHead(statusCode, {
-    "Content-Type": "text/plain; charset=utf-8"
+    ...SECURITY_HEADERS,
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "no-store",
+    ...extraHeaders
   });
   response.end(body);
 }
