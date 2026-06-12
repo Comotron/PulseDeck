@@ -31,6 +31,11 @@ select {
   font: inherit;
 }
 
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
 .bg-mesh {
   background: radial-gradient(ellipse at 20% 10%, rgba(59, 130, 246, 0.13) 0%, transparent 55%),
     radial-gradient(ellipse at 80% 50%, rgba(16, 185, 129, 0.07) 0%, transparent 55%),
@@ -111,12 +116,12 @@ select {
 .nav-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 2.5rem;
+  gap: 0.65rem;
+  min-height: 3rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
-  padding: 0.55rem 0.85rem;
+  padding: 0.65rem 1rem;
   color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 700;
@@ -126,8 +131,9 @@ select {
 
 .nav-link svg,
 .icon-text-button svg {
-  height: 1rem;
-  width: 1rem;
+  height: 1.5rem;
+  width: 1.5rem;
+  flex: 0 0 auto;
 }
 
 .nav-link:hover,
@@ -160,16 +166,6 @@ select {
   border: 1px solid rgba(96, 165, 250, 0.28);
   background: rgba(96, 165, 250, 0.1);
   color: #93c5fd;
-}
-
-.table-scroll {
-  width: 100%;
-  overflow: visible;
-}
-
-.summary-table-wrap {
-  width: 100%;
-  overflow: visible;
 }
 
 .summary-th,
@@ -241,6 +237,15 @@ select {
 }
 
 .project-data-grid {
+  width: 100%;
+}
+
+.summary-grid-head,
+.summary-grid-body,
+.summary-grid-row,
+.project-grid-header,
+.project-grid-body,
+.project-grid-row {
   width: 100%;
 }
 
@@ -338,12 +343,12 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  min-height: 2.6rem;
+  gap: 0.65rem;
+  min-height: 3rem;
   border-radius: 999px;
   border: 1px solid rgba(96, 165, 250, 0.25);
   background: rgba(96, 165, 250, 0.12);
-  padding: 0.6rem 0.9rem;
+  padding: 0.65rem 1rem;
   color: #dbeafe;
   font-size: 0.875rem;
   font-weight: 800;
@@ -647,6 +652,27 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.035);
   padding: 0.85rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .fade-in-up,
+  .sync-button.syncing svg {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .metric-card:hover {
+    transform: none !important;
+  }
 }
 
 @media (max-width: 640px) {
