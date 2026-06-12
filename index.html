@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Everything Site</title>
+    <title>PulseDeck</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -12,33 +12,43 @@
   <body class="bg-mesh">
     <div class="app-shell">
       <aside class="side-rail glass" aria-label="Primary">
-        <a class="brand-mark" href="#top" aria-label="Everything Site home">
-          <i data-lucide="blocks"></i>
+        <a class="brand-mark" href="#top" aria-label="PulseDeck home">
+          <span class="pulse-logo" aria-hidden="true">
+            <svg viewBox="0 0 32 32" focusable="false">
+              <path class="logo-card back" d="M8 5h11a3 3 0 0 1 3 3v3H11a3 3 0 0 0-3 3v8H6a3 3 0 0 1-3-3V10a5 5 0 0 1 5-5Z"></path>
+              <path class="logo-card front" d="M13 12h11a5 5 0 0 1 5 5v5a5 5 0 0 1-5 5H13a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Z"></path>
+              <path class="logo-pulse" d="M13.5 20h3l1.7-4 3.4 8 1.6-4h4"></path>
+            </svg>
+          </span>
         </a>
         <nav class="rail-nav" aria-label="Workspace sections">
           <a class="rail-button active" href="#top" aria-label="Dashboard"><i data-lucide="layout-dashboard"></i></a>
           <a class="rail-button" href="#weather" aria-label="Weather"><i data-lucide="cloud-sun"></i></a>
           <a class="rail-button" href="#feeds" aria-label="Data Feeds"><i data-lucide="activity"></i></a>
-          <a class="rail-button" href="#infrastructure" aria-label="Infrastructure"><i data-lucide="landmark"></i></a>
         </nav>
-        <a class="rail-button" href="#research" aria-label="Research Log">
-          <i data-lucide="notebook-pen"></i>
-        </a>
+        <span class="rail-spacer" aria-hidden="true"></span>
       </aside>
 
       <main id="top" class="workspace">
         <header class="topbar glass">
           <div class="wordmark">
-            <span class="wordmark-icon"><i data-lucide="blocks"></i></span>
-            <span>Everything Site</span>
+            <span class="wordmark-icon">
+              <span class="pulse-logo" aria-hidden="true">
+                <svg viewBox="0 0 32 32" focusable="false">
+                  <path class="logo-card back" d="M8 5h11a3 3 0 0 1 3 3v3H11a3 3 0 0 0-3 3v8H6a3 3 0 0 1-3-3V10a5 5 0 0 1 5-5Z"></path>
+                  <path class="logo-card front" d="M13 12h11a5 5 0 0 1 5 5v5a5 5 0 0 1-5 5H13a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Z"></path>
+                  <path class="logo-pulse" d="M13.5 20h3l1.7-4 3.4 8 1.6-4h4"></path>
+                </svg>
+              </span>
+            </span>
+            <span>PulseDeck</span>
           </div>
-          <label class="command-bar">
-            <i data-lucide="search"></i>
-            <input id="globalSearch" type="search" placeholder="Search cities, projects, signals, research" autocomplete="off">
-          </label>
-          <div class="system-time">
-            <span id="dayLabel">Today</span>
-            <strong id="timeLabel">--:--</strong>
+          <div class="topbar-status">
+            <span class="live-chip"><span class="status-dot"></span> Live Signals</span>
+            <div class="system-time">
+              <span id="dayLabel">Today</span>
+              <strong id="timeLabel">--:--</strong>
+            </div>
           </div>
         </header>
 
@@ -57,41 +67,51 @@
           </div>
 
           <div id="weatherGrid" class="weather-grid" aria-live="polite">
-            <article class="glass weather-card loading" data-city="Benson" data-search-item>
-              <span class="weather-led"></span>
-              <p class="eyebrow">Benson</p>
+            <article class="glass weather-card loading" data-city="Benson">
+              <div class="weather-card-top">
+                <p class="weather-city">Benson, NC</p>
+                <span class="weather-led"></span>
+              </div>
               <div class="weather-temp">--&deg;F</div>
               <div class="weather-sky-element" aria-hidden="true"></div>
               <p class="weather-condition">Loading forecast</p>
               <p class="weather-meta">35.3815, -78.5486</p>
             </article>
-            <article class="glass weather-card loading" data-city="Raleigh" data-search-item>
-              <span class="weather-led"></span>
-              <p class="eyebrow">Raleigh</p>
+            <article class="glass weather-card loading" data-city="Raleigh">
+              <div class="weather-card-top">
+                <p class="weather-city">Raleigh, NC</p>
+                <span class="weather-led"></span>
+              </div>
               <div class="weather-temp">--&deg;F</div>
               <div class="weather-sky-element" aria-hidden="true"></div>
               <p class="weather-condition">Loading forecast</p>
               <p class="weather-meta">35.7796, -78.6382</p>
             </article>
-            <article class="glass weather-card loading" data-city="Fayetteville" data-search-item>
-              <span class="weather-led"></span>
-              <p class="eyebrow">Fayetteville</p>
+            <article class="glass weather-card loading" data-city="Fayetteville">
+              <div class="weather-card-top">
+                <p class="weather-city">Fayetteville, NC</p>
+                <span class="weather-led"></span>
+              </div>
               <div class="weather-temp">--&deg;F</div>
               <div class="weather-sky-element" aria-hidden="true"></div>
               <p class="weather-condition">Loading forecast</p>
               <p class="weather-meta">35.0527, -78.8784</p>
             </article>
-            <article class="glass weather-card loading" data-city="Greensboro" data-search-item>
-              <span class="weather-led"></span>
-              <p class="eyebrow">Greensboro</p>
+            <article class="glass weather-card loading" data-city="Greensboro">
+              <div class="weather-card-top">
+                <p class="weather-city">Greensboro, NC</p>
+                <span class="weather-led"></span>
+              </div>
               <div class="weather-temp">--&deg;F</div>
               <div class="weather-sky-element" aria-hidden="true"></div>
               <p class="weather-condition">Loading forecast</p>
               <p class="weather-meta">36.0726, -79.7920</p>
             </article>
-            <article class="glass weather-card loading" data-city="Charlotte" data-search-item>
-              <span class="weather-led"></span>
-              <p class="eyebrow">Charlotte</p>
+            <article class="glass weather-card loading" data-city="Charlotte">
+              <div class="weather-card-top">
+                <p class="weather-city">Charlotte, NC</p>
+                <span class="weather-led"></span>
+              </div>
               <div class="weather-temp">--&deg;F</div>
               <div class="weather-sky-element" aria-hidden="true"></div>
               <p class="weather-condition">Loading forecast</p>
@@ -103,24 +123,32 @@
         <section id="feeds" class="content-band" aria-labelledby="feeds-title">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Configurable feeds</p>
+              <p class="eyebrow">Live signals</p>
               <h2 id="feeds-title" class="section-title">Market & Route Pulse</h2>
             </div>
           </div>
 
           <div class="feed-grid">
-            <article class="glass widget-card market-widget" data-search-item>
+            <article class="glass widget-card market-widget">
               <div class="widget-header">
                 <div>
                   <p class="eyebrow">Market pulse</p>
-                  <h3>Watchlist Signals</h3>
+                  <h3>Your Holdings</h3>
                 </div>
-                <span class="status-dot positive"></span>
+                <div class="market-actions">
+                  <span id="marketUpdated" class="update-chip">Awaiting quotes</span>
+                  <button id="refreshMarket" class="icon-action" type="button" aria-label="Refresh market">
+                    <i data-lucide="refresh-cw"></i>
+                  </button>
+                  <span id="marketFeedDot" class="status-dot warning"></span>
+                </div>
               </div>
-              <div id="marketPulseList" class="market-list"></div>
+              <div id="marketSummary" class="market-summary-grid" aria-live="polite"></div>
+              <div id="marketPulseList" class="market-list holdings-list" aria-live="polite"></div>
+              <p class="market-footnote">Live quote feed for personal monitoring only.</p>
             </article>
 
-            <article class="glass widget-card route-widget" data-search-item>
+            <article class="glass widget-card route-widget">
               <div class="widget-header">
                 <div>
                   <p class="eyebrow">Route monitor</p>
@@ -136,77 +164,6 @@
                 <span class="route-line branch"></span>
               </div>
               <div id="routeStatusList" class="route-status-list"></div>
-            </article>
-          </div>
-        </section>
-
-        <section id="infrastructure" class="content-band" aria-labelledby="infrastructure-title">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Infrastructure & development</p>
-              <h2 id="infrastructure-title" class="section-title">Project Intelligence</h2>
-            </div>
-          </div>
-
-          <div class="infrastructure-layout">
-            <article class="glass widget-card project-widget" data-search-item>
-              <div class="widget-header">
-                <div>
-                  <p class="eyebrow">Municipal project progress</p>
-                  <h3>Development Signals</h3>
-                </div>
-                <i data-lucide="hard-hat"></i>
-              </div>
-              <div id="projectSignalList" class="project-list"></div>
-            </article>
-
-            <article class="glass widget-card template-widget" data-search-item>
-              <div class="widget-header">
-                <div>
-                  <p class="eyebrow">Structural templates</p>
-                  <h3>Tracking Frames</h3>
-                </div>
-                <i data-lucide="panel-top"></i>
-              </div>
-              <div class="template-grid">
-                <button class="template-chip" type="button">Council Packet</button>
-                <button class="template-chip" type="button">Bid Timeline</button>
-                <button class="template-chip" type="button">Funding Source</button>
-                <button class="template-chip" type="button">Site Constraint</button>
-              </div>
-            </article>
-
-            <article id="research" class="glass widget-card research-widget" data-search-item>
-              <div class="widget-header">
-                <div>
-                  <p class="eyebrow">Research log</p>
-                  <h3>Field Notes</h3>
-                </div>
-                <i data-lucide="notebook-pen"></i>
-              </div>
-
-              <form id="researchLogForm" class="research-form">
-                <label>
-                  <span>Signal title</span>
-                  <input id="logTitle" name="title" type="text" placeholder="e.g. Raleigh BRT corridor update" required>
-                </label>
-                <label>
-                  <span>Category</span>
-                  <select id="logCategory" name="category">
-                    <option>Infrastructure</option>
-                    <option>Market</option>
-                    <option>Weather</option>
-                    <option>Research</option>
-                  </select>
-                </label>
-                <label class="full-field">
-                  <span>Note</span>
-                  <textarea id="logBody" name="body" rows="4" placeholder="Add context, source notes, or next action..." required></textarea>
-                </label>
-                <button class="primary-action" type="submit"><i data-lucide="plus"></i><span>Add Log</span></button>
-              </form>
-
-              <div id="researchLogList" class="research-log-list" aria-live="polite"></div>
             </article>
           </div>
         </section>

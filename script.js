@@ -1,4 +1,4 @@
-const NWS_USER_AGENT = "(EverythingSiteCommandCenter, contact@example.com)";
+const NWS_USER_AGENT = "(PulseDeck, contact@example.com)";
 const NWS_HEADERS = {
   "Accept": "application/geo+json",
   "User-Agent": NWS_USER_AGENT
@@ -6,7 +6,7 @@ const NWS_HEADERS = {
 
 // Update cadence lives here so future widgets can tune refresh timing without touching render logic.
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
-const RESEARCH_STORAGE_KEY = "everything-site-research-log-v2";
+const MARKET_REFRESH_MS = 60 * 1000;
 
 const weatherLocations = [
   { city: "Benson", state: "NC", lat: 35.3815, lon: -78.5486 },
@@ -16,23 +16,20 @@ const weatherLocations = [
   { city: "Charlotte", state: "NC", lat: 35.2271, lon: -80.8431 }
 ];
 
-const marketPulse = [
-  { symbol: "SPY", label: "S&P 500 ETF", change: 0.42 },
-  { symbol: "QQQ", label: "Nasdaq 100 ETF", change: 0.68 },
-  { symbol: "DIA", label: "Dow ETF", change: -0.18 },
-  { symbol: "IWM", label: "Russell 2000 ETF", change: 0.24 }
+const marketHoldings = [
+  { symbol: "AAL", label: "American Airlines", group: "Airlines" },
+  { symbol: "TSLA", label: "Tesla", group: "Growth" },
+  { symbol: "VZ", label: "Verizon", group: "Telecom" },
+  { symbol: "NVDA", label: "NVIDIA", group: "AI / Chips" },
+  { symbol: "TMUS", label: "T-Mobile US", group: "Telecom" },
+  { symbol: "DAL", label: "Delta Air Lines", group: "Airlines" },
+  { symbol: "AMZN", label: "Amazon", group: "Mega-cap Tech" }
 ];
 
 const routeStatuses = [
   { label: "I-40 / Raleigh", status: "Clear", tone: "positive" },
   { label: "I-95 / Fayetteville", status: "Watch", tone: "warning" },
   { label: "CLT access", status: "Normal", tone: "positive" }
-];
-
-const projectSignals = [
-  { title: "Raleigh BRT Southern Corridor", phase: "Planning", progress: 62 },
-  { title: "Fayetteville corridor redevelopment", phase: "Tracking", progress: 44 },
-  { title: "Benson utility expansion map", phase: "Research", progress: 28 }
 ];
 
 const skyIcons = {
@@ -60,23 +57,22 @@ const skyIcons = {
 
 const dayLabel = document.querySelector("#dayLabel");
 const timeLabel = document.querySelector("#timeLabel");
-const globalSearch = document.querySelector("#globalSearch");
 const weatherUpdated = document.querySelector("#weatherUpdated");
 const refreshWeatherButton = document.querySelector("#refreshWeather");
+const marketUpdated = document.querySelector("#marketUpdated");
+const refreshMarketButton = document.querySelector("#refreshMarket");
+const marketFeedDot = document.querySelector("#marketFeedDot");
+const marketSummary = document.querySelector("#marketSummary");
 const marketPulseList = document.querySelector("#marketPulseList");
 const routeStatusList = document.querySelector("#routeStatusList");
-const projectSignalList = document.querySelector("#projectSignalList");
-const researchLogForm = document.querySelector("#researchLogForm");
-const researchLogList = document.querySelector("#researchLogList");
+
+let marketRequestInFlight = false;
 
 function initDashboard() {
   initClock();
   initWeatherCanvas();
   initMarketPulse();
   initRouteMonitor();
-  initInfrastructureSignals();
-  initResearchLog();
-  initSearch();
   refreshIcons();
 }
 
@@ -136,14 +132,14 @@ async function loadWeatherCanvas() {
 
 async function fetchNwsForecast(location) {
   const pointUrl = `https://api.weather.gov/points/${location.lat},${location.lon}`;
-  const pointData = await fetchJson(pointUrl);
+  const pointData = await fetchJson(pointUrl, NWS_HEADERS);
   const forecastUrl = pointData?.properties?.forecast;
 
   if (!forecastUrl) {
     throw new Error(`Forecast URL missing for ${location.city}`);
   }
 
-  const forecastData = await fetchJson(forecastUrl);
+  const forecastData = await fetchJson(forecastUrl, NWS_HEADERS);
   const currentPeriod = forecastData?.properties?.periods?.[0];
 
   if (!currentPeriod) {
@@ -153,8 +149,8 @@ async function fetchNwsForecast(location) {
   return currentPeriod;
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url, { headers: NWS_HEADERS });
+async function fetchJson(url, headers = { "Accept": "application/json" }) {
+  const response = await fetch(url, { headers });
 
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText}`);
@@ -172,7 +168,6 @@ function renderWeatherCard(city, period) {
   card.querySelector(".weather-sky-element").innerHTML = skin.icon;
   card.querySelector(".weather-condition").textContent = period.shortForecast;
   card.querySelector(".weather-meta").textContent = `${period.windSpeed || "Wind pending"} ${period.windDirection || ""}`.trim();
-  card.dataset.searchText = `${city} ${period.shortForecast} ${period.temperature} ${period.windSpeed || ""}`;
 }
 
 function renderWeatherError(city, error) {
@@ -182,7 +177,6 @@ function renderWeatherError(city, error) {
   card.querySelector(".weather-sky-element").innerHTML = skyIcons.hazard;
   card.querySelector(".weather-condition").textContent = "Forecast unavailable";
   card.querySelector(".weather-meta").textContent = error?.message || "NWS request failed";
-  card.dataset.searchText = `${city} forecast unavailable`;
 }
 
 function findWeatherCard(city) {
@@ -218,21 +212,329 @@ function getWeatherSkin(shortForecast = "", iconUrl = "") {
 }
 
 function initMarketPulse() {
-  marketPulseList.innerHTML = marketPulse
-    .map((item) => {
-      const direction = item.change >= 0 ? "positive" : "critical";
-      const sign = item.change >= 0 ? "+" : "";
-      return `
-        <div class="market-row">
+  renderMarketSkeleton();
+  refreshMarketButton.addEventListener("click", () => loadMarketPulse());
+  loadMarketPulse();
+  setInterval(loadMarketPulse, MARKET_REFRESH_MS);
+}
+
+async function loadMarketPulse() {
+  if (marketRequestInFlight) {
+    return;
+  }
+
+  marketRequestInFlight = true;
+  setMarketLoadingState(true);
+
+  try {
+    if (window.location.protocol === "file:") {
+      throw new Error("Start the live hub server to enable market quotes.");
+    }
+
+    const symbols = marketHoldings.map((holding) => holding.symbol).join(",");
+    const data = await fetchJson(`/api/quotes?symbols=${encodeURIComponent(symbols)}`);
+    const quotes = marketHoldings.map((holding) => {
+      const quote = data.quotes.find((item) => item.symbol === holding.symbol);
+      return { ...holding, ...quote };
+    });
+
+    renderMarketSummary(quotes);
+    renderMarketCards(quotes);
+    setMarketFeedTone(quotes);
+    marketUpdated.textContent = `Updated ${new Date(data.asOf || Date.now()).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit"
+    })}`;
+  } catch (error) {
+    renderMarketError(error);
+  } finally {
+    marketRequestInFlight = false;
+    setMarketLoadingState(false);
+  }
+}
+
+function renderMarketSkeleton() {
+  marketSummary.innerHTML = `
+    <div class="market-summary-card">
+      <span>Portfolio mood</span>
+      <strong>Connecting</strong>
+    </div>
+    <div class="market-summary-card">
+      <span>Top mover</span>
+      <strong>--</strong>
+    </div>
+    <div class="market-summary-card">
+      <span>Pressure point</span>
+      <strong>--</strong>
+    </div>
+  `;
+
+  marketPulseList.innerHTML = marketHoldings
+    .map((holding) => `
+      <article class="market-row loading">
+        <div class="market-card-top">
           <div>
-            <strong>${item.symbol}</strong>
-            <span>${item.label}</span>
+            <strong>${holding.symbol}</strong>
+            <span>${holding.label}</span>
           </div>
-          <b class="${direction}">${sign}${item.change.toFixed(2)}%</b>
+          <em>${holding.group}</em>
         </div>
+        <div class="market-price-row">
+          <b>--</b>
+          <span>Waiting</span>
+        </div>
+        <div class="sparkline-placeholder"></div>
+        <div class="market-meta">
+          <span>Quote pending</span>
+          <span>--</span>
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+function renderMarketSummary(quotes) {
+  const validQuotes = quotes.filter((quote) => Number.isFinite(quote.changePercent));
+  const upCount = validQuotes.filter((quote) => quote.changePercent >= 0).length;
+  const downCount = validQuotes.length - upCount;
+  const topMover = [...validQuotes].sort((a, b) => b.changePercent - a.changePercent)[0];
+  const pressurePoint = [...validQuotes].sort((a, b) => a.changePercent - b.changePercent)[0];
+  const mood = getMarketMood(upCount, downCount, validQuotes.length);
+
+  marketSummary.innerHTML = `
+    <div class="market-summary-card">
+      <span>Portfolio mood</span>
+      <strong>${mood}</strong>
+    </div>
+    <div class="market-summary-card">
+      <span>${upCount} up / ${downCount} down</span>
+      <strong>${validQuotes.length ? "Tracking live" : "No quotes"}</strong>
+    </div>
+    <div class="market-summary-card ${topMover ? getMarketTone(topMover.changePercent) : ""}">
+      <span>Top mover</span>
+      <strong>${topMover ? `${topMover.symbol} ${formatPercent(topMover.changePercent)}` : "--"}</strong>
+    </div>
+    <div class="market-summary-card ${pressurePoint ? getMarketTone(pressurePoint.changePercent) : ""}">
+      <span>Pressure point</span>
+      <strong>${pressurePoint ? `${pressurePoint.symbol} ${formatPercent(pressurePoint.changePercent)}` : "--"}</strong>
+    </div>
+  `;
+}
+
+function renderMarketCards(quotes) {
+  marketPulseList.innerHTML = quotes
+    .map((quote) => {
+      if (quote.error || !Number.isFinite(quote.price)) {
+        return renderMarketCardError(quote);
+      }
+
+      const tone = getMarketTone(quote.changePercent);
+      const price = formatCurrency(quote.price, quote.currency);
+      const change = `${formatCurrency(quote.change, quote.currency)} ${formatPercent(quote.changePercent)}`;
+      const points = getSparklinePoints(quote.sparkline || []);
+      const session = quote.session || "Market";
+      const quoteTime = quote.marketTime ? formatQuoteTime(quote.marketTime) : "Time pending";
+
+      return `
+        <article class="market-row ${tone}">
+          <div class="market-card-top">
+            <div>
+              <strong>${escapeHtml(quote.symbol)}</strong>
+              <span>${escapeHtml(quote.name || quote.label)}</span>
+            </div>
+            <em>${escapeHtml(quote.group)}</em>
+          </div>
+          <div class="market-price-row">
+            <b>${price}</b>
+            <span class="${tone === "is-up" ? "positive" : tone === "is-down" ? "critical" : "warning"}">${change}</span>
+          </div>
+          ${renderSparkline(points, tone)}
+          <div class="market-meta">
+            <span>${escapeHtml(session)} &middot; ${quoteTime}</span>
+            <span>${formatVolume(quote.volume)}</span>
+          </div>
+        </article>
       `;
     })
     .join("");
+}
+
+function renderMarketCardError(quote) {
+  return `
+    <article class="market-row is-error">
+      <div class="market-card-top">
+        <div>
+          <strong>${escapeHtml(quote.symbol)}</strong>
+          <span>${escapeHtml(quote.label)}</span>
+        </div>
+        <em>${escapeHtml(quote.group)}</em>
+      </div>
+      <div class="market-price-row">
+        <b>--</b>
+        <span class="critical">Offline</span>
+      </div>
+      <div class="sparkline-placeholder"></div>
+      <div class="market-meta">
+        <span>Quote unavailable</span>
+        <span>Retry</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderSparkline(points, tone) {
+  if (!points) {
+    return `<div class="sparkline-placeholder"></div>`;
+  }
+
+  return `
+    <svg class="market-sparkline ${tone}" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="${points}"></polyline>
+    </svg>
+  `;
+}
+
+function renderMarketError(error) {
+  marketSummary.innerHTML = `
+    <div class="market-summary-card is-down">
+      <span>Market feed</span>
+      <strong>Offline</strong>
+    </div>
+    <div class="market-summary-card">
+      <span>Next step</span>
+      <strong>Run live hub</strong>
+    </div>
+  `;
+  marketPulseList.innerHTML = `
+    <div class="empty-state market-error">
+      <span>${escapeHtml(error?.message || "Live quotes unavailable.")}</span>
+    </div>
+  `;
+  marketUpdated.textContent = "Quotes offline";
+  marketFeedDot.className = "status-dot critical";
+}
+
+function setMarketLoadingState(isLoading) {
+  refreshMarketButton.disabled = isLoading;
+  refreshMarketButton.classList.toggle("is-loading", isLoading);
+}
+
+function setMarketFeedTone(quotes) {
+  const validQuotes = quotes.filter((quote) => Number.isFinite(quote.changePercent));
+  const upCount = validQuotes.filter((quote) => quote.changePercent >= 0).length;
+  const tone = validQuotes.length === 0
+    ? "critical"
+    : upCount >= Math.ceil(validQuotes.length * 0.6)
+      ? "positive"
+      : upCount <= Math.floor(validQuotes.length * 0.4)
+        ? "critical"
+        : "warning";
+
+  marketFeedDot.className = `status-dot ${tone}`;
+}
+
+function getMarketMood(upCount, downCount, total) {
+  if (!total) {
+    return "No signal";
+  }
+
+  if (upCount === total) {
+    return "All green";
+  }
+
+  if (downCount === total) {
+    return "Under pressure";
+  }
+
+  if (upCount >= Math.ceil(total * 0.65)) {
+    return "Mostly green";
+  }
+
+  if (downCount >= Math.ceil(total * 0.65)) {
+    return "Risk-off";
+  }
+
+  return "Mixed";
+}
+
+function getMarketTone(value) {
+  if (!Number.isFinite(value) || Math.abs(value) < 0.01) {
+    return "is-flat";
+  }
+
+  return value > 0 ? "is-up" : "is-down";
+}
+
+function getSparklinePoints(values) {
+  const numericValues = values.filter((value) => Number.isFinite(value));
+
+  if (numericValues.length < 2) {
+    return "";
+  }
+
+  const sampleSize = 34;
+  const step = Math.max(1, Math.floor(numericValues.length / sampleSize));
+  const sampledValues = numericValues.filter((_, index) => index % step === 0).slice(-sampleSize);
+  const min = Math.min(...sampledValues);
+  const max = Math.max(...sampledValues);
+  const spread = max - min || 1;
+
+  return sampledValues
+    .map((value, index) => {
+      const x = sampledValues.length === 1 ? 0 : (index / (sampledValues.length - 1)) * 100;
+      const y = 25 - ((value - min) / spread) * 22;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
+function formatCurrency(value, currency = "USD") {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+
+  return new Intl.NumberFormat([], {
+    style: "currency",
+    currency,
+    minimumFractionDigits: value >= 100 ? 2 : 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+}
+
+function formatVolume(value) {
+  if (!Number.isFinite(value)) {
+    return "Vol --";
+  }
+
+  if (value >= 1_000_000_000) {
+    return `Vol ${(value / 1_000_000_000).toFixed(1)}B`;
+  }
+
+  if (value >= 1_000_000) {
+    return `Vol ${(value / 1_000_000).toFixed(1)}M`;
+  }
+
+  if (value >= 1_000) {
+    return `Vol ${(value / 1_000).toFixed(1)}K`;
+  }
+
+  return `Vol ${value}`;
+}
+
+function formatQuoteTime(unixSeconds) {
+  return new Date(unixSeconds * 1000).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
 
 function initRouteMonitor() {
@@ -246,110 +548,6 @@ function initRouteMonitor() {
     .join("");
 }
 
-function initInfrastructureSignals() {
-  projectSignalList.innerHTML = projectSignals
-    .map((project) => `
-      <div class="project-row">
-        <div class="project-row-top">
-          <strong>${project.title}</strong>
-          <span>${project.phase}</span>
-        </div>
-        <div class="progress-track">
-          <span style="width: ${project.progress}%"></span>
-        </div>
-      </div>
-    `)
-    .join("");
-}
-
-function initResearchLog() {
-  renderResearchLogs(readResearchLogs());
-
-  researchLogForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const formData = new FormData(researchLogForm);
-    const nextLog = {
-      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-      title: formData.get("title").trim(),
-      category: formData.get("category"),
-      body: formData.get("body").trim(),
-      createdAt: new Date().toISOString()
-    };
-
-    if (!nextLog.title || !nextLog.body) {
-      return;
-    }
-
-    const logs = [nextLog, ...readResearchLogs()].slice(0, 12);
-    writeResearchLogs(logs);
-    renderResearchLogs(logs);
-    researchLogForm.reset();
-    refreshIcons();
-  });
-}
-
-function readResearchLogs() {
-  try {
-    return JSON.parse(localStorage.getItem(RESEARCH_STORAGE_KEY)) || getDefaultResearchLogs();
-  } catch {
-    return getDefaultResearchLogs();
-  }
-}
-
-function writeResearchLogs(logs) {
-  localStorage.setItem(RESEARCH_STORAGE_KEY, JSON.stringify(logs));
-}
-
-function getDefaultResearchLogs() {
-  return [
-    {
-      id: "seed-raleigh",
-      title: "Raleigh corridor funding watch",
-      category: "Infrastructure",
-      body: "Track council agenda references, grant cycles, and right-of-way notes.",
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: "seed-benson",
-      title: "Benson development signal baseline",
-      category: "Research",
-      body: "Create a reference file for zoning notices, utilities, and parcel movement.",
-      createdAt: new Date().toISOString()
-    }
-  ];
-}
-
-function renderResearchLogs(logs) {
-  researchLogList.innerHTML = logs
-    .map((log) => `
-      <article class="research-log-entry" data-search-item data-search-text="${escapeAttribute(`${log.title} ${log.category} ${log.body}`)}">
-        <div>
-          <strong>${escapeHtml(log.title)}</strong>
-          <span>${escapeHtml(log.category)} &middot; ${formatLogTime(log.createdAt)}</span>
-        </div>
-        <p>${escapeHtml(log.body)}</p>
-      </article>
-    `)
-    .join("");
-}
-
-function formatLogTime(value) {
-  return new Date(value).toLocaleDateString([], {
-    month: "short",
-    day: "numeric"
-  });
-}
-
-function initSearch() {
-  globalSearch.addEventListener("input", () => {
-    const query = globalSearch.value.trim().toLowerCase();
-    document.querySelectorAll("[data-search-item]").forEach((item) => {
-      const searchable = (item.dataset.searchText || item.textContent || "").toLowerCase();
-      item.toggleAttribute("hidden", Boolean(query) && !searchable.includes(query));
-    });
-  });
-}
-
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -357,10 +555,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-function escapeAttribute(value) {
-  return escapeHtml(value).replaceAll("`", "&#096;");
 }
 
 document.addEventListener("DOMContentLoaded", initDashboard);
