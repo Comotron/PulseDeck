@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Matthew Birthday Wishlist</title>
+    <meta name="description" content="A live gallery for Matthew's birthday wishlist.">
+    <meta name="theme-color" content="#f4f6f2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="wishlist.css">
+  </head>
+  <body>
+    <main class="wishlist-shell">
+      <header class="wishlist-topbar">
+        <a class="icon-button" href="index.html" aria-label="Back to PulseDeck">
+          <i data-lucide="arrow-left"></i>
+        </a>
+        <div class="title-stack">
+          <p>Matthew Birthday</p>
+          <h1>Wishlist</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="wishlistUpdated" class="sync-chip">Connecting</span>
+          <button id="refreshWishlist" class="icon-button" type="button" aria-label="Refresh wishlist">
+            <i data-lucide="refresh-cw"></i>
+          </button>
+        </div>
+      </header>
+
+      <section class="wishlist-summary" aria-label="Wishlist summary">
+        <div>
+          <span>Total</span>
+          <strong id="wishlistTotal">--</strong>
+        </div>
+        <div>
+          <span>Open</span>
+          <strong id="wishlistOpen">--</strong>
+        </div>
+        <div>
+          <span>Purchased</span>
+          <strong id="wishlistPurchased">--</strong>
+        </div>
+      </section>
+
+      <section id="wishlistGrid" class="wishlist-grid" aria-live="polite"></section>
+
+      <section id="wishlistEmpty" class="empty-panel" hidden>
+        <i data-lucide="gift"></i>
+        <strong>No wishlist items found.</strong>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="wishlist.js"></script>
+  </body>
+</html>
