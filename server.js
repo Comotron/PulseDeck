@@ -21,6 +21,14 @@ const BALLDONTLIE_ORIGIN = "https://api.balldontlie.io";
 const NBA_STATS_ORIGIN = "https://api.server.nbaapi.com";
 const OPENF1_ORIGIN = "https://api.openf1.org";
 const FPL_ORIGIN = "https://fantasy.premierleague.com";
+const NOTION_API_ORIGIN = "https://api.notion.com";
+const NOTION_API_VERSION = process.env.NOTION_API_VERSION || "2026-03-11";
+const NOTION_WISHLIST_DATA_SOURCE_ID = process.env.NOTION_WISHLIST_DATA_SOURCE_ID || "db6a50ba-405f-83a9-96f8-077a8f740f79";
+const WISHLIST_CACHE_MS = 15_000;
+const WISHLIST_STATUS_PROPERTY = "Status";
+const WISHLIST_PURCHASED_STATUS = "Purchased";
+const WISHLIST_NOT_PURCHASED_STATUS = "Not Purchased";
+const WISHLIST_WRITEABLE_STATUSES = new Set([WISHLIST_PURCHASED_STATUS, WISHLIST_NOT_PURCHASED_STATUS]);
 const AIRPORT_WEATHER_CACHE_MS = 60_000;
 const AIRPORT_META_CACHE_MS = 24 * 60 * 60 * 1000;
 const TRANSIT_CACHE_MS = 5 * 60 * 1000;
@@ -94,6 +102,7 @@ const travelWeatherCache = new Map();
 const airportMetadataCache = new Map();
 const transitCache = new Map();
 const sportsCache = new Map();
+let wishlistCache = null;
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -103,6 +112,8 @@ const contentTypes = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
   ".svg": "image/svg+xml; charset=utf-8",
   ".ico": "image/x-icon"
 };
@@ -112,8 +123,9 @@ const SECURITY_HEADERS = {
   "X-Frame-Options": "SAMEORIGIN",
   "Permissions-Policy": "camera=(), microphone=(), payment=(), usb=(), geolocation=(self)"
 };
-const CACHEABLE_STATIC_EXTENSIONS = new Set([".css", ".js", ".png", ".jpg", ".jpeg", ".svg", ".ico"]);
-const ALLOWED_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const CACHEABLE_STATIC_EXTENSIONS = new Set([".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".avif", ".svg", ".ico"]);
+const ALLOWED_METHODS = new Set(["GET", "HEAD", "PATCH", "OPTIONS"]);
+const STANDARD_ALLOW_HEADER = "GET, HEAD, PATCH, OPTIONS";
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -121,7 +133,7 @@ const server = http.createServer(async (request, response) => {
 
     if (!ALLOWED_METHODS.has(request.method)) {
       sendText(response, 405, "Method not allowed", {
-        "Allow": "GET, HEAD, OPTIONS"
+        "Allow": STANDARD_ALLOW_HEADER
       });
       return;
     }
@@ -129,9 +141,46 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "OPTIONS" && requestUrl.pathname !== "/api/nws") {
       response.writeHead(204, {
         ...SECURITY_HEADERS,
-        "Allow": "GET, HEAD, OPTIONS"
+        "Allow": STANDARD_ALLOW_HEADER
       });
       response.end();
+      return;
+    }
+
+    if (requestUrl.pathname === "/api/wishlist") {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        sendText(response, 405, "Method not allowed", { "Allow": "GET, HEAD, OPTIONS" });
+        return;
+      }
+
+      await handleWishlist(requestUrl, request.method, response);
+      return;
+    }
+
+    const wishlistPurchaseMatch = /^\/api\/wishlist\/items\/([^/]+)\/purchase$/.exec(requestUrl.pathname);
+    if (wishlistPurchaseMatch) {
+      if (request.method !== "PATCH") {
+        sendText(response, 405, "Method not allowed", { "Allow": "PATCH, OPTIONS" });
+        return;
+      }
+
+      await handleWishlistPurchase(request, wishlistPurchaseMatch[1], response);
+      return;
+    }
+
+    const wishlistStatusMatch = /^\/api\/wishlist\/items\/([^/]+)\/status$/.exec(requestUrl.pathname);
+    if (wishlistStatusMatch) {
+      if (request.method !== "PATCH") {
+        sendText(response, 405, "Method not allowed", { "Allow": "PATCH, OPTIONS" });
+        return;
+      }
+
+      await handleWishlistStatusUpdate(request, wishlistStatusMatch[1], response);
+      return;
+    }
+
+    if (request.method === "PATCH") {
+      sendText(response, 405, "Method not allowed", { "Allow": "GET, HEAD, OPTIONS" });
       return;
     }
 
@@ -197,6 +246,418 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, () => {
   console.log(`PulseDeck live hub running at http://localhost:${PORT}`);
 });
+
+async function handleWishlist(requestUrl, method, response) {
+  try {
+    const force = requestUrl.searchParams.get("force") === "1";
+    const items = await loadWishlistItems(force);
+    const payload = {
+      asOf: new Date().toISOString(),
+      source: "Notion",
+      dataSourceId: NOTION_WISHLIST_DATA_SOURCE_ID,
+      items
+    };
+
+    if (method === "HEAD") {
+      response.writeHead(200, {
+        ...SECURITY_HEADERS,
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store"
+      });
+      response.end();
+      return;
+    }
+
+    sendJson(response, 200, payload);
+  } catch (error) {
+    sendNotionError(response, error, "Wishlist unavailable");
+  }
+}
+
+async function handleWishlistPurchase(request, rawPageId, response) {
+  try {
+    const pageId = normalizeNotionId(rawPageId);
+    const body = await readJsonBody(request);
+
+    if (body.status && body.status !== WISHLIST_PURCHASED_STATUS) {
+      sendJson(response, 400, {
+        error: "Unsupported wishlist status",
+        message: `Only ${WISHLIST_PURCHASED_STATUS} updates are allowed from this action.`
+      });
+      return;
+    }
+
+    const page = await updateWishlistStatus(pageId, WISHLIST_PURCHASED_STATUS);
+    const details = await fetchWishlistBlockDetails(page).catch(() => ({}));
+    wishlistCache = null;
+
+    sendJson(response, 200, {
+      asOf: new Date().toISOString(),
+      item: normalizeWishlistPage(page, details)
+    });
+  } catch (error) {
+    sendNotionError(response, error, "Wishlist update failed");
+  }
+}
+
+async function handleWishlistStatusUpdate(request, rawPageId, response) {
+  try {
+    const pageId = normalizeNotionId(rawPageId);
+    const body = await readJsonBody(request);
+    const status = body.status;
+
+    if (!WISHLIST_WRITEABLE_STATUSES.has(status)) {
+      sendJson(response, 400, {
+        error: "Unsupported wishlist status",
+        message: `Status must be either ${WISHLIST_PURCHASED_STATUS} or ${WISHLIST_NOT_PURCHASED_STATUS}.`
+      });
+      return;
+    }
+
+    const page = await updateWishlistStatus(pageId, status);
+    const details = await fetchWishlistBlockDetails(page).catch(() => ({}));
+    wishlistCache = null;
+
+    sendJson(response, 200, {
+      asOf: new Date().toISOString(),
+      item: normalizeWishlistPage(page, details)
+    });
+  } catch (error) {
+    sendNotionError(response, error, "Wishlist update failed");
+  }
+}
+
+async function loadWishlistItems(force = false) {
+  if (wishlistCache && !force && Date.now() - wishlistCache.createdAt < WISHLIST_CACHE_MS) {
+    return wishlistCache.items;
+  }
+
+  const pages = await queryWishlistPages();
+  const detailResults = await mapWithConcurrency(pages, 3, async (page) => {
+    const base = normalizeWishlistPage(page);
+
+    if (base.imageUrl && base.linkUrl && base.linkUrl !== page.url) {
+      return {};
+    }
+
+    return fetchWishlistBlockDetails(page).catch(() => ({}));
+  });
+  const items = pages.map((page, index) => normalizeWishlistPage(page, detailResults[index]));
+
+  wishlistCache = {
+    createdAt: Date.now(),
+    items
+  };
+
+  return items;
+}
+
+async function queryWishlistPages() {
+  const pages = [];
+  let startCursor = null;
+
+  do {
+    const body = {
+      page_size: 100,
+      sorts: [
+        {
+          property: "Price",
+          direction: "descending"
+        }
+      ]
+    };
+
+    if (startCursor) {
+      body.start_cursor = startCursor;
+    }
+
+    const payload = await notionRequest(`/v1/data_sources/${NOTION_WISHLIST_DATA_SOURCE_ID}/query`, {
+      method: "POST",
+      body
+    });
+
+    pages.push(...(payload.results || []).filter((item) => item.object === "page"));
+    startCursor = payload.has_more ? payload.next_cursor : null;
+  } while (startCursor);
+
+  return pages;
+}
+
+async function updateWishlistStatus(pageId, statusName) {
+  return notionRequest(`/v1/pages/${pageId}`, {
+    method: "PATCH",
+    body: {
+      properties: {
+        [WISHLIST_STATUS_PROPERTY]: {
+          status: {
+            name: statusName
+          }
+        }
+      }
+    }
+  });
+}
+
+async function fetchWishlistBlockDetails(page) {
+  const payload = await notionRequest(`/v1/blocks/${page.id}/children?page_size=25`, {
+    method: "GET"
+  });
+  const details = {
+    imageUrl: "",
+    productUrl: ""
+  };
+
+  for (const block of payload.results || []) {
+    if (!details.imageUrl) {
+      details.imageUrl = getBlockImageUrl(block);
+    }
+
+    if (!details.productUrl) {
+      details.productUrl = getBlockProductUrl(block);
+    }
+
+    if (details.imageUrl && details.productUrl) {
+      break;
+    }
+  }
+
+  return details;
+}
+
+function normalizeWishlistPage(page, details = {}) {
+  const properties = page.properties || {};
+  const linkProperty = properties.Link;
+  const linkFiles = Array.isArray(linkProperty?.files) ? linkProperty.files : [];
+  const fileUrl = getFirstFileUrl(linkFiles);
+  const productUrl = getPropertyUrl(linkProperty) || details.productUrl || fileUrl || page.url;
+  const imageUrl = getPageFileUrl(page.cover) || details.imageUrl || getFirstImageFileUrl(linkFiles);
+  const status = properties.Status?.status?.name || "Not Purchased";
+
+  return {
+    id: page.id,
+    title: getTitleText(properties.Name) || "Untitled item",
+    linkUrl: productUrl,
+    notionUrl: page.url,
+    imageUrl,
+    price: Number.isFinite(properties.Price?.number) ? properties.Price.number : null,
+    status,
+    statusClass: slugifyStatus(status),
+    purchased: status === WISHLIST_PURCHASED_STATUS,
+    createdTime: page.created_time || null,
+    lastEditedTime: page.last_edited_time || null
+  };
+}
+
+function getTitleText(property) {
+  return getPlainText(property?.title);
+}
+
+function getPlainText(parts = []) {
+  return (Array.isArray(parts) ? parts : [])
+    .map((part) => part.plain_text || part.text?.content || "")
+    .join("")
+    .trim();
+}
+
+function getPropertyUrl(property) {
+  if (!property) {
+    return "";
+  }
+
+  if (property.type === "url") {
+    return property.url || "";
+  }
+
+  if (property.type === "rich_text") {
+    return (property.rich_text || []).find((part) => part.href)?.href || "";
+  }
+
+  if (property.type === "files") {
+    return getFirstFileUrl(property.files);
+  }
+
+  return "";
+}
+
+function getFirstFileUrl(files = []) {
+  const file = (Array.isArray(files) ? files : []).find((item) => getPageFileUrl(item));
+  return file ? getPageFileUrl(file) : "";
+}
+
+function getFirstImageFileUrl(files = []) {
+  const file = (Array.isArray(files) ? files : []).find((item) => isLikelyImageUrl(getPageFileUrl(item), item.name));
+  return file ? getPageFileUrl(file) : "";
+}
+
+function getPageFileUrl(fileObject) {
+  if (!fileObject) {
+    return "";
+  }
+
+  if (fileObject.type === "external") {
+    return fileObject.external?.url || "";
+  }
+
+  if (fileObject.type === "file") {
+    return fileObject.file?.url || "";
+  }
+
+  return "";
+}
+
+function getBlockImageUrl(block) {
+  const type = block?.type;
+
+  if (type === "image" || type === "file") {
+    return getPageFileUrl(block[type]);
+  }
+
+  return "";
+}
+
+function getBlockProductUrl(block) {
+  const type = block?.type;
+
+  if (type === "bookmark") {
+    return block.bookmark?.url || "";
+  }
+
+  if (type === "embed") {
+    return block.embed?.url || "";
+  }
+
+  if (type === "link_preview") {
+    return block.link_preview?.url || "";
+  }
+
+  if (type === "paragraph") {
+    return (block.paragraph?.rich_text || []).find((part) => part.href)?.href || "";
+  }
+
+  return "";
+}
+
+function isLikelyImageUrl(url = "", name = "") {
+  const value = `${url} ${name}`.toLowerCase();
+  return /\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#]|$)/i.test(value)
+    || value.includes("image")
+    || value.includes("notion-static.com");
+}
+
+function slugifyStatus(value = "") {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "unknown";
+}
+
+async function notionRequest(pathname, { method = "GET", body = null } = {}) {
+  const token = process.env.NOTION_API_KEY || process.env.NOTION_TOKEN;
+
+  if (!token) {
+    const error = new Error("Missing NOTION_API_KEY or NOTION_TOKEN on the local server.");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const response = await fetchWithTimeout(`${NOTION_API_ORIGIN}${pathname}`, {
+    method,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Notion-Version": NOTION_API_VERSION,
+      "Accept": "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {})
+    },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  }, 10000);
+  const text = await response.text();
+  const payload = text ? safeParseJson(text) : {};
+
+  if (!response.ok) {
+    const error = new Error(payload?.message || `${response.status} ${response.statusText}`);
+    error.statusCode = response.status;
+    error.details = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
+function safeParseJson(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { raw: value };
+  }
+}
+
+function normalizeNotionId(value = "") {
+  const decoded = decodeURIComponent(value).trim();
+
+  if (!/^[0-9a-fA-F-]{32,36}$/.test(decoded)) {
+    const error = new Error("Invalid Notion page ID.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return decoded;
+}
+
+function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+
+    request.on("data", (chunk) => {
+      body += chunk;
+
+      if (body.length > 1_000_000) {
+        reject(new Error("Request body is too large."));
+        request.destroy();
+      }
+    });
+
+    request.on("end", () => {
+      if (!body.trim()) {
+        resolve({});
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        const error = new Error("Request body must be valid JSON.");
+        error.statusCode = 400;
+        reject(error);
+      }
+    });
+
+    request.on("error", reject);
+  });
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+function sendNotionError(response, error, fallback) {
+  sendJson(response, error.statusCode || 502, {
+    error: fallback,
+    message: error.message,
+    details: error.details || null
+  });
+}
 
 async function handleQuotes(requestUrl, response) {
   const symbols = parseSymbols(requestUrl.searchParams.get("symbols"));
