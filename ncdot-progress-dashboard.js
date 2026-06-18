@@ -11,8 +11,6 @@ const projects = [
     spent: 289.2,
     physical: 71,
     status: "Active / On Schedule",
-    latitude: 34.6183,
-    longitude: -79.0086,
     dates: {
       letting: "Jan 18, 2024",
       award: "Feb 21, 2024",
@@ -30,12 +28,10 @@ const projects = [
     county: "Wake",
     description: "NC 540 interchange and corridor improvements near Raleigh",
     contractor: "Blythe Construction Inc.",
-    budget: 212.0,
+    budget: 212,
     spent: 137.4,
     physical: 63,
     status: "Under Review",
-    latitude: 35.7312,
-    longitude: -78.7974,
     dates: {
       letting: "Sep 19, 2023",
       award: "Oct 24, 2023",
@@ -57,8 +53,6 @@ const projects = [
     spent: 152.9,
     physical: 48,
     status: "Active / On Schedule",
-    latitude: 35.2032,
-    longitude: -80.8431,
     dates: {
       letting: "Mar 12, 2024",
       award: "Apr 16, 2024",
@@ -80,8 +74,6 @@ const projects = [
     spent: 126.3,
     physical: 82,
     status: "Delayed / Behind Schedule",
-    latitude: 35.5951,
-    longitude: -82.5515,
     dates: {
       letting: "Jun 20, 2022",
       award: "Jul 27, 2022",
@@ -103,8 +95,6 @@ const projects = [
     spent: 169.6,
     physical: 93,
     status: "Completed / Final Estimate",
-    latitude: 34.366,
-    longitude: -77.713,
     dates: {
       letting: "Nov 15, 2021",
       award: "Dec 21, 2021",
@@ -126,8 +116,6 @@ const projects = [
     spent: 31.1,
     physical: 46,
     status: "Active / On Schedule",
-    latitude: 35.2313,
-    longitude: -75.624,
     dates: {
       letting: "Dec 13, 2023",
       award: "Jan 17, 2024",
@@ -142,32 +130,32 @@ const projects = [
 const activities = [
   {
     title: "HiCAMS nightly sync completed",
-    detail: "6 active contracts refreshed with estimate, payment, and milestone data.",
-    time: "Jun 10, 2026 2:15 AM ET",
+    detail: "Six active contracts refreshed with estimate, payment, and milestone data.",
+    time: "Jun 10, 2026 at 2:15 AM ET",
     tone: "green",
   },
   {
     title: "Estimate #18 posted for I-5986",
     detail: "Physical progress advanced to 71% after girder installation and shoulder drainage work.",
-    time: "Jun 9, 2026 4:40 PM ET",
+    time: "Jun 9, 2026 at 4:40 PM ET",
     tone: "blue",
   },
   {
     title: "Scope review opened for R-5700",
-    detail: "Utility relocation variance moved the Raleigh corridor package into amber review.",
-    time: "Jun 9, 2026 11:25 AM ET",
+    detail: "Utility relocation variance moved the Raleigh package into amber review.",
+    time: "Jun 9, 2026 at 11:25 AM ET",
     tone: "amber",
   },
   {
     title: "Delay flag escalated on I-2513AA",
     detail: "Retaining wall sequencing and weather impacts pushed the Asheville connector behind baseline.",
-    time: "Jun 8, 2026 3:18 PM ET",
+    time: "Jun 8, 2026 at 3:18 PM ET",
     tone: "red",
   },
   {
     title: "Final estimate routed for R-2633BA",
     detail: "Hampstead bypass package entered closeout review after substantial completion.",
-    time: "Jun 6, 2026 9:05 AM ET",
+    time: "Jun 6, 2026 at 9:05 AM ET",
     tone: "gray",
   },
 ];
@@ -176,27 +164,30 @@ const statusMeta = {
   "Active / On Schedule": {
     short: "On Schedule",
     className: "status-positive",
-    gauge: "#10B981",
+    gauge: "#146c2e",
   },
   "Under Review": {
     short: "Under Review",
     className: "status-warning",
-    gauge: "#F59E0B",
+    gauge: "#855300",
   },
   "Delayed / Behind Schedule": {
     short: "Delayed",
     className: "status-critical",
-    gauge: "#EF4444",
+    gauge: "#b3261e",
   },
   "Completed / Final Estimate": {
     short: "Final Estimate",
     className: "status-muted",
-    gauge: "#64748B",
+    gauge: "#747775",
   },
 };
 
 const allStatuses = Object.keys(statusMeta);
 const allDivisions = Array.from({ length: 14 }, (_, index) => index + 1);
+const SYNC_STORAGE_KEY = "ncdot-progress-dashboard-sync-state";
+const SYNC_TIME_ZONE = "America/New_York";
+const DAILY_SYNC_HOUR = 2;
 
 let activeSection = "dashboard";
 let projectFilters = { query: "", status: "all", division: "all" };
@@ -205,19 +196,31 @@ let syncState = {
   lastSyncAt: "2026-06-10T06:15:00.000Z",
   lastSyncType: "nightly",
 };
-
-const SYNC_STORAGE_KEY = "ncdot-progress-dashboard-sync-state";
-const SYNC_TIME_ZONE = "America/New_York";
-const DAILY_SYNC_HOUR = 2;
+let lastDrawerTrigger = null;
 
 const formatCurrency = (value) =>
-  new Intl.NumberFormat("en-US", {
+  `${new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: value >= 1000 ? 2 : 1,
-  }).format(value >= 1000 ? value / 1000 : value) + (value >= 1000 ? "B" : "M");
+  }).format(value >= 1000 ? value / 1000 : value)}${value >= 1000 ? "B" : "M"}`;
 
 const percent = (project) => Math.round((project.spent / project.budget) * 100);
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function refreshNcdotIcons() {
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+}
 
 function loadSyncState() {
   try {
@@ -267,25 +270,27 @@ function shouldAutoSyncNow() {
 function updateSyncUI() {
   const lastSync = new Date(syncState.lastSyncAt);
   const nextSync = nextDailySyncDate();
-  const syncTypeLabel = syncState.lastSyncType === "manual" ? "Manual HiCAMS Sync Complete" : "HiCAMS Sync Complete";
+  const isManual = syncState.lastSyncType === "manual";
+  const syncTypeLabel = isManual ? "Manual sync complete" : "Nightly sync complete";
 
-  const dataCycleStatus = document.getElementById("dataCycleStatus");
-  const dataCycleTime = document.getElementById("dataCycleTime");
-  const nextSyncLabel = document.getElementById("nextSyncLabel");
-  const autoSyncMeta = document.getElementById("autoSyncMeta");
-  const manualSyncMeta = document.getElementById("manualSyncMeta");
+  const updates = {
+    dataCycleStatus: isManual ? "Manual HiCAMS Sync Complete" : "HiCAMS Sync Complete",
+    dataCycleTime: formatSyncDate(lastSync),
+    nextSyncLabel: `Next daily refresh: ${formatSyncDate(nextSync)}`,
+    autoSyncMeta: `Runs daily at 2:00 AM ET. Next refresh: ${formatSyncDate(nextSync)}.`,
+    manualSyncMeta: `Last sync: ${formatSyncDate(lastSync)}.`,
+    headerSyncStatus: `${syncTypeLabel} · ${formatSyncDate(lastSync)}`,
+  };
 
-  if (dataCycleStatus) dataCycleStatus.textContent = syncTypeLabel;
-  if (dataCycleTime) dataCycleTime.textContent = formatSyncDate(lastSync);
-  if (nextSyncLabel) nextSyncLabel.textContent = `Next daily refresh: ${formatSyncDate(nextSync)}`;
-  if (autoSyncMeta) autoSyncMeta.textContent = `Runs daily at 2:00 AM ET. Next refresh: ${formatSyncDate(nextSync)}.`;
-  if (manualSyncMeta) manualSyncMeta.textContent = `Last sync: ${formatSyncDate(lastSync)}.`;
+  Object.entries(updates).forEach(([id, text]) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = text;
+  });
 }
 
 function addSyncActivity(type) {
-  const isManual = type === "manual";
   activities.unshift({
-    title: isManual ? "Manual HiCAMS sync completed" : "Daily HiCAMS sync completed",
+    title: type === "manual" ? "Manual HiCAMS sync completed" : "Daily HiCAMS sync completed",
     detail: "Project estimates, financial progress, and dashboard cycle status refreshed.",
     time: formatSyncDate(syncState.lastSyncAt),
     tone: "green",
@@ -310,23 +315,22 @@ function scheduleDailyAutoRefresh() {
   window.setTimeout(() => {
     performSync("auto");
     scheduleDailyAutoRefresh();
-  }, Math.min(delay, 2147483647));
+  }, Math.min(delay, 2_147_483_647));
 }
 
 function initSyncCycle() {
   loadSyncState();
-  if (shouldAutoSyncNow()) performSync("auto");
-  else updateSyncUI();
+  if (shouldAutoSyncNow()) {
+    performSync("auto");
+  } else {
+    updateSyncUI();
+  }
   scheduleDailyAutoRefresh();
 }
 
 function statusBadge(status, compact = false) {
   const meta = statusMeta[status];
-  return `
-    <span class="status-badge ${meta.className}">
-      ${compact ? meta.short : status}
-    </span>
-  `;
+  return `<span class="status-badge ${meta.className}">${compact ? meta.short : escapeHtml(status)}</span>`;
 }
 
 function divisionBadge(division) {
@@ -341,9 +345,9 @@ function ncdotProjectLink(project, label = "NCDOT page") {
       target="_blank"
       rel="noopener noreferrer"
       data-external-project
-      aria-label="Open NCDOT project page for ${project.stip}"
+      aria-label="Open official NCDOT project page for ${project.stip}"
     >
-      <i data-lucide="external-link" class="h-4 w-4" aria-hidden="true"></i>
+      <i data-lucide="external-link" aria-hidden="true"></i>
       <span>${label}</span>
     </a>
   `;
@@ -357,49 +361,43 @@ function renderMetrics() {
   const onScheduleRate = Math.round((onSchedule / totalContracts) * 100);
   const metrics = [
     {
-      label: "Total Active Contracts",
+      label: "Total active contracts",
       value: totalContracts,
       detail: "Across Divisions 1, 3, 5, 6, 10, and 13",
       icon: "briefcase-business",
-      glow: "glow-blue",
     },
     {
-      label: "Total STIP Allocation Value",
+      label: "Total STIP allocation",
       value: formatCurrency(totalBudget),
       detail: "$906.5M spent to date",
       icon: "landmark",
-      glow: "glow-blue",
     },
     {
-      label: "On-Schedule Rate",
+      label: "On-schedule rate",
       value: `${onScheduleRate}%`,
-      detail: `${onSchedule} of ${totalContracts} contracts green`,
+      detail: `${onSchedule} of ${totalContracts} contracts currently green`,
       icon: "circle-check-big",
-      glow: "glow-green",
     },
     {
-      label: "Critical / Delayed Projects",
+      label: "Critical / delayed",
       value: critical,
       detail: "Requires executive review",
       icon: "triangle-alert",
-      glow: "glow-gold",
     },
   ];
 
   document.getElementById("metricStrip").innerHTML = metrics
     .map(
       (metric) => `
-        <article class="metric-card glass ${metric.glow}">
-          <div class="flex items-start justify-between gap-4">
+        <article class="material-card metric-card">
+          <div class="metric-card-top">
             <div>
-              <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">${metric.label}</p>
-              <p class="mt-4 font-mono text-3xl font-bold text-white">${metric.value}</p>
+              <small>${metric.label}</small>
+              <strong>${metric.value}</strong>
             </div>
-            <div class="metric-icon">
-              <i data-lucide="${metric.icon}" class="h-5 w-5" aria-hidden="true"></i>
-            </div>
+            <span class="metric-icon"><i data-lucide="${metric.icon}" aria-hidden="true"></i></span>
           </div>
-          <p class="mt-5 text-sm leading-relaxed text-slate-400">${metric.detail}</p>
+          <p>${metric.detail}</p>
         </article>
       `
     )
@@ -410,24 +408,17 @@ function renderDashboardRows() {
   document.getElementById("dashboardProjectRows").innerHTML = projects
     .map(
       (project) => `
-        <div class="summary-grid-row data-row cursor-pointer" data-project-row="${project.id}" tabindex="0" role="row">
-          <div class="summary-cell td td-strong" role="cell" data-label="STIP ID">
-            <div class="flex items-center gap-2">
-              <span>${project.stip}</span>
-              ${ncdotProjectLink(project, "NCDOT")}
+        <div class="summary-grid-row" data-project-row="${project.id}" tabindex="0" role="row">
+          <div class="summary-primary" role="cell">${project.stip}</div>
+          <div role="cell">${divisionBadge(project.division)}</div>
+          <div class="summary-route" role="cell">${escapeHtml(project.description)}</div>
+          <div class="progress-inline" role="cell">
+            <div class="progress-track">
+              <div class="progress-fill" style="width:${project.physical}%;background:${statusMeta[project.status].gauge}"></div>
             </div>
+            <span class="progress-value">${project.physical}%</span>
           </div>
-          <div class="summary-cell td" role="cell" data-label="Division">${divisionBadge(project.division)}</div>
-          <div class="summary-cell td" role="cell" data-label="Route">${project.description}</div>
-          <div class="summary-cell td" role="cell" data-label="Physical">
-            <div class="flex items-center gap-3">
-              <div class="progress-track flex-1">
-                <div class="progress-fill" style="width:${project.physical}%; background:${statusMeta[project.status].gauge}"></div>
-              </div>
-              <span class="font-mono text-sm font-bold text-white">${project.physical}%</span>
-            </div>
-          </div>
-          <div class="summary-cell td" role="cell" data-label="Status">${statusBadge(project.status, true)}</div>
+          <div role="cell">${statusBadge(project.status, true)}</div>
         </div>
       `
     )
@@ -445,14 +436,13 @@ function renderActivityLog() {
 
   document.getElementById("activityLog").innerHTML = activities
     .map(
-      (activity, index) => `
-        <li class="relative grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-5 last:pb-0">
-          ${index === activities.length - 1 ? "" : '<span class="absolute left-2 top-4 h-full w-px bg-white/10"></span>'}
-          <span class="activity-dot ${toneMap[activity.tone]}"></span>
+      (activity) => `
+        <li class="activity-item">
+          <span class="activity-dot ${toneMap[activity.tone]}" aria-hidden="true"></span>
           <div>
-            <p class="text-sm font-semibold text-white">${activity.title}</p>
-            <p class="mt-1 text-sm leading-5 text-slate-400">${activity.detail}</p>
-            <time class="mt-2 block font-mono text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">${activity.time}</time>
+            <strong>${escapeHtml(activity.title)}</strong>
+            <p>${escapeHtml(activity.detail)}</p>
+            <time>${escapeHtml(activity.time)}</time>
           </div>
         </li>
       `
@@ -470,7 +460,8 @@ function sortedFilteredProjects() {
         .toLowerCase()
         .includes(query);
     const matchesStatus = projectFilters.status === "all" || project.status === projectFilters.status;
-    const matchesDivision = projectFilters.division === "all" || project.division === Number(projectFilters.division);
+    const matchesDivision =
+      projectFilters.division === "all" || project.division === Number(projectFilters.division);
     return matchesQuery && matchesStatus && matchesDivision;
   });
 
@@ -509,208 +500,195 @@ function renderActiveChips(filtered) {
   if (projectFilters.query) chips.push(`Search: ${projectFilters.query}`);
   if (projectFilters.status !== "all") chips.push(projectFilters.status);
   if (projectFilters.division !== "all") chips.push(`Division ${projectFilters.division}`);
-  document.getElementById("projectCountLabel").textContent = `${filtered.length} of ${projects.length} contracts shown`;
+
+  document.getElementById("projectCountLabel").textContent =
+    `${filtered.length} of ${projects.length} contracts shown`;
   document.getElementById("activeFilterChips").innerHTML = chips
-    .map((chip) => `<span class="filter-chip">${chip}</span>`)
+    .map((chip) => `<span class="filter-chip">${escapeHtml(chip)}</span>`)
     .join("");
 }
 
 function renderProjectsTable() {
   const filtered = sortedFilteredProjects();
   renderActiveChips(filtered);
+
   const rows = filtered
     .map((project) => {
       const financial = percent(project);
       return `
-        <div class="project-grid-row data-row cursor-pointer" data-project-row="${project.id}" tabindex="0" role="row">
-          <div class="project-cell td td-strong" role="cell" data-label="STIP ID">${project.stip}</div>
-          <div class="project-cell td font-mono text-slate-300" role="cell" data-label="Contract">${project.contract}</div>
-          <div class="project-cell td" role="cell" data-label="Division">${divisionBadge(project.division)}</div>
-          <div class="project-cell td" role="cell" data-label="County">${project.county}</div>
-          <div class="project-cell td leading-5" role="cell" data-label="Description / Route">${project.description}</div>
-          <div class="project-cell td td-muted" role="cell" data-label="Contractor">${project.contractor}</div>
-          <div class="project-cell td" role="cell" data-label="Financial Progress">
-            <div class="w-full">
-              <div class="mb-2 flex justify-between font-mono text-xs font-bold text-slate-400">
+        <div class="project-grid-row" data-project-row="${project.id}" tabindex="0" role="row">
+          <div class="project-cell primary" role="cell" data-label="STIP ID">${project.stip}</div>
+          <div class="project-cell" role="cell" data-label="Contract">${project.contract}</div>
+          <div class="project-cell" role="cell" data-label="Division">${divisionBadge(project.division)}</div>
+          <div class="project-cell" role="cell" data-label="County">${project.county}</div>
+          <div class="project-cell" role="cell" data-label="Description / Route">${escapeHtml(project.description)}</div>
+          <div class="project-cell muted" role="cell" data-label="Contractor">${escapeHtml(project.contractor)}</div>
+          <div class="project-cell" role="cell" data-label="Financial Progress">
+            <div class="financial-progress">
+              <div class="financial-values">
                 <span>${formatCurrency(project.spent)}</span>
                 <span>${formatCurrency(project.budget)}</span>
               </div>
-              <div class="progress-track">
-                <div class="progress-fill" style="width:${financial}%"></div>
-              </div>
-              <p class="mt-2 text-xs text-slate-500">${financial}% spent vs. budgeted</p>
+              <div class="progress-track"><div class="progress-fill" style="width:${financial}%"></div></div>
+              <p>${financial}% spent vs. budgeted</p>
             </div>
           </div>
-          <div class="project-cell td" role="cell" data-label="Physical Progress">
-            <div class="flex items-center gap-3">
-              <div class="gauge relative" style="--value:${project.physical}; --gauge-color:${statusMeta[project.status].gauge}">
+          <div class="project-cell" role="cell" data-label="Physical Progress">
+            <div class="physical-progress">
+              <div class="gauge" style="--value:${project.physical};--gauge-color:${statusMeta[project.status].gauge}">
                 <span>${project.physical}%</span>
               </div>
-              <span class="text-sm font-semibold text-slate-400">HiCAMS</span>
+              <small>HiCAMS</small>
             </div>
           </div>
-          <div class="project-cell td" role="cell" data-label="Status">${statusBadge(project.status)}</div>
-          <div class="project-cell td" role="cell" data-label="NCDOT Link">${ncdotProjectLink(project)}</div>
+          <div class="project-cell" role="cell" data-label="Status">${statusBadge(project.status)}</div>
+          <div class="project-cell" role="cell" data-label="NCDOT Link">${ncdotProjectLink(project, "Open")}</div>
         </div>
       `;
     })
     .join("");
 
   document.getElementById("projectsTableBody").innerHTML =
-    rows ||
-    '<div class="td py-10 text-center text-sm font-semibold text-slate-500">No contracts match the selected filters.</div>';
-  if (window.lucide) lucide.createIcons();
+    rows || '<div class="empty-row">No contracts match the selected filters.</div>';
+  refreshNcdotIcons();
 }
 
-function showSection(section) {
+function showSection(section, shouldScroll = false) {
+  if (!document.getElementById(section)) return;
   activeSection = section;
-  document.querySelectorAll(".page-section").forEach((element) => element.classList.toggle("active", element.id === section));
-  document.querySelectorAll("[data-section]").forEach((button) => button.classList.toggle("active", button.dataset.section === section));
+  document.querySelectorAll(".dashboard-view").forEach((element) => {
+    element.classList.toggle("active", element.id === section);
+  });
+  document.querySelectorAll("[data-section]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.section === section);
+  });
+  if (shouldScroll) {
+    document.getElementById("ncdot")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
-function openDrawer(projectId) {
+function openDrawer(projectId, trigger) {
   const project = projects.find((item) => item.id === projectId);
   if (!project) return;
+
+  lastDrawerTrigger = trigger || document.activeElement;
   const meta = statusMeta[project.status];
   const financial = percent(project);
   document.getElementById("drawerContent").innerHTML = `
-    <div class="border-b border-white/10 px-6 py-6">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">Project Detail</p>
-          <h2 id="drawerTitle" class="hero-gradient-text mt-3 text-3xl font-bold">${project.stip}</h2>
-          <p class="mt-3 text-sm leading-relaxed text-slate-300">${project.description}</p>
+    <div class="drawer-header">
+      <div>
+        <p class="section-label">Project detail</p>
+        <h2 id="drawerTitle">${project.stip}</h2>
+        <p>${escapeHtml(project.description)}</p>
+        <div class="drawer-actions">
+          ${statusBadge(project.status)}
+          ${ncdotProjectLink(project, "Official NCDOT page")}
         </div>
-        <button id="closeDrawer" class="rounded-lg border border-white/10 bg-white/[0.04] p-2 text-slate-300 transition hover:border-blue-400/40 hover:bg-blue-400/10 hover:text-white" type="button" data-close-drawer aria-label="Close project detail">
-          <i data-lucide="x" class="h-5 w-5" aria-hidden="true"></i>
-        </button>
       </div>
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        ${statusBadge(project.status)}
-        ${ncdotProjectLink(project, "Open NCDOT project page")}
-      </div>
+      <button class="icon-button" type="button" data-close-drawer aria-label="Close project detail">
+        <i data-lucide="x" aria-hidden="true"></i>
+      </button>
     </div>
-    <div class="space-y-5 px-6 py-5">
-      <section class="drawer-panel-section">
-        <div class="grid grid-cols-2 gap-3">
-          <div class="p-4">
-            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Contract</p>
-            <p class="mt-2 font-mono font-bold text-white">${project.contract}</p>
-          </div>
-          <div class="p-4">
-            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Division / County</p>
-            <p class="mt-2 font-semibold text-white">Division ${project.division}, ${project.county}</p>
-          </div>
-        </div>
+    <div class="drawer-body">
+      <section class="drawer-section">
+        <h3>Contract</h3>
+        <dl class="drawer-grid">
+          <div class="drawer-data"><dt>Contract number</dt><dd>${project.contract}</dd></div>
+          <div class="drawer-data"><dt>Division / County</dt><dd>Division ${project.division}, ${project.county}</dd></div>
+        </dl>
       </section>
 
-      <section class="drawer-panel-section">
-        <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-500">Progress</h3>
-        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <section class="drawer-section">
+        <h3>Progress</h3>
+        <div class="drawer-progress-grid">
           <div>
-            <div class="mb-2 flex justify-between text-sm font-semibold text-slate-300">
-              <span>Spent vs. Budgeted</span>
-              <span>${financial}%</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill" style="width:${financial}%"></div>
-            </div>
-            <p class="mt-2 text-sm text-slate-400">${formatCurrency(project.spent)} spent of ${formatCurrency(project.budget)}</p>
+            <strong>Spent vs. budgeted · ${financial}%</strong>
+            <div class="progress-track"><div class="progress-fill" style="width:${financial}%"></div></div>
+            <p>${formatCurrency(project.spent)} spent of ${formatCurrency(project.budget)}</p>
           </div>
-          <div class="flex items-center gap-4">
-            <div class="gauge relative" style="--value:${project.physical}; --gauge-color:${meta.gauge}">
+          <div class="physical-progress">
+            <div class="gauge" style="--value:${project.physical};--gauge-color:${meta.gauge}">
               <span>${project.physical}%</span>
             </div>
-            <div>
-              <p class="font-semibold text-white">Physical Progress</p>
-              <p class="text-sm text-slate-400">Current HiCAMS estimate</p>
-            </div>
+            <div><strong>Physical progress</strong><p>Current HiCAMS estimate</p></div>
           </div>
         </div>
       </section>
 
-      <section class="drawer-panel-section">
-        <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-500">Key Dates</h3>
-        <dl class="mt-4 grid gap-3 sm:grid-cols-2">
+      <section class="drawer-section">
+        <h3>Key dates</h3>
+        <dl class="drawer-grid">
           ${[
-            ["Letting Date", project.dates.letting],
-            ["Award Date", project.dates.award],
-            ["Completion Date", project.dates.completion],
-            ["Last Estimate Thru Date", project.dates.estimate],
+            ["Letting date", project.dates.letting],
+            ["Award date", project.dates.award],
+            ["Completion date", project.dates.completion],
+            ["Last estimate through", project.dates.estimate],
           ]
             .map(
-              ([label, value]) => `
-                <div class="drawer-date-box">
-                  <dt class="text-xs font-semibold uppercase tracking-widest text-slate-500">${label}</dt>
-                  <dd class="mt-2 font-semibold text-white">${value}</dd>
-                </div>
-              `
+              ([label, value]) =>
+                `<div class="drawer-data"><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`
             )
             .join("")}
         </dl>
       </section>
 
-      <section class="drawer-panel-section">
-        <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-500">NCDOT Contact Person</h3>
-        <div class="mt-4 flex items-center gap-3">
-          <div class="grid h-11 w-11 place-items-center rounded-xl border border-blue-400/30 bg-blue-400/10 text-blue-200">
-            <i data-lucide="user-round" class="h-5 w-5" aria-hidden="true"></i>
-          </div>
-          <div>
-            <p class="font-semibold text-white">${project.contact.name}</p>
-            <p class="text-sm text-slate-400">${project.contact.phone}</p>
-          </div>
+      <section class="drawer-section">
+        <h3>NCDOT contact</h3>
+        <div class="contact-row">
+          <span class="contact-icon"><i data-lucide="user-round" aria-hidden="true"></i></span>
+          <div><strong>${escapeHtml(project.contact.name)}</strong><p>${escapeHtml(project.contact.phone)}</p></div>
         </div>
       </section>
     </div>
   `;
 
-  const drawer = document.getElementById("projectDrawer");
-  const backdrop = document.getElementById("drawerBackdrop");
-  drawer.classList.remove("hidden");
-  backdrop.classList.remove("hidden");
-  requestAnimationFrame(() => drawer.classList.remove("translate-x-full"));
-  if (window.lucide) lucide.createIcons();
-  document.getElementById("closeDrawer").focus();
+  document.getElementById("projectDrawer").classList.remove("hidden");
+  document.getElementById("drawerBackdrop").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  refreshNcdotIcons();
+  document.querySelector("[data-close-drawer]")?.focus();
 }
 
 function closeDrawer() {
-  const drawer = document.getElementById("projectDrawer");
-  const backdrop = document.getElementById("drawerBackdrop");
-  drawer.classList.add("translate-x-full");
-  window.setTimeout(() => {
-    drawer.classList.add("hidden");
-    backdrop.classList.add("hidden");
-  }, 180);
+  document.getElementById("projectDrawer").classList.add("hidden");
+  document.getElementById("drawerBackdrop").classList.add("hidden");
+  document.body.style.overflow = "";
+  lastDrawerTrigger?.focus?.();
+}
+
+function resetFilters() {
+  projectFilters = { query: "", status: "all", division: "all" };
+  document.getElementById("projectSearch").value = "";
+  renderProjectFilters();
+  renderProjectsTable();
 }
 
 function bindEvents() {
   document.addEventListener("click", (event) => {
-    const closeButton = event.target.closest("[data-close-drawer]");
-    if (closeButton) {
+    if (event.target.closest("[data-close-drawer]")) {
       closeDrawer();
       return;
     }
 
-    const externalProjectLink = event.target.closest("[data-external-project]");
-    if (externalProjectLink) {
-      return;
-    }
+    if (event.target.closest("[data-external-project]")) return;
 
     const navButton = event.target.closest("[data-section]");
-    if (navButton) showSection(navButton.dataset.section);
+    if (navButton) {
+      showSection(navButton.dataset.section, !navButton.closest(".dashboard-tabs"));
+    }
 
     const projectTrigger = event.target.closest("[data-project-row]");
-    if (projectTrigger) openDrawer(projectTrigger.dataset.projectRow);
+    if (projectTrigger) {
+      openDrawer(projectTrigger.dataset.projectRow, projectTrigger);
+    }
   });
 
   document.addEventListener("keydown", (event) => {
     if (event.target.closest("[data-external-project]")) return;
-
     const projectTrigger = event.target.closest("[data-project-row]");
     if (projectTrigger && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
-      openDrawer(projectTrigger.dataset.projectRow);
+      openDrawer(projectTrigger.dataset.projectRow, projectTrigger);
     }
     if (event.key === "Escape") closeDrawer();
   });
@@ -741,12 +719,7 @@ function bindEvents() {
     });
   });
 
-  document.getElementById("resetProjectFilters").addEventListener("click", () => {
-    projectFilters = { query: "", status: "all", division: "all" };
-    document.getElementById("projectSearch").value = "";
-    renderProjectFilters();
-    renderProjectsTable();
-  });
+  document.getElementById("resetProjectFilters").addEventListener("click", resetFilters);
 
   document.getElementById("forceSyncButton").addEventListener("click", () => {
     const button = document.getElementById("forceSyncButton");
@@ -757,8 +730,8 @@ function bindEvents() {
       performSync("manual");
       button.disabled = false;
       button.classList.remove("syncing");
-      button.querySelector("span").textContent = "Force Sync";
-      if (window.lucide) lucide.createIcons();
+      button.querySelector("span").textContent = "Force sync";
+      refreshNcdotIcons();
     }, 650);
   });
 
@@ -778,7 +751,7 @@ function bindEvents() {
   });
 }
 
-function boot() {
+function bootNcdotDashboard() {
   initSyncCycle();
   renderMetrics();
   renderDashboardRows();
@@ -786,7 +759,7 @@ function boot() {
   renderProjectFilters();
   renderProjectsTable();
   bindEvents();
-  if (window.lucide) lucide.createIcons();
+  refreshNcdotIcons();
 }
 
-document.addEventListener("DOMContentLoaded", boot);
+document.addEventListener("DOMContentLoaded", bootNcdotDashboard);

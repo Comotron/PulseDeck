@@ -1,0 +1,12 @@
+{
+  "name": "pulsedeck",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Material Design dashboard for North Carolina weather and NCDOT HiCAMS project monitoring.",
+  "scripts": {
+    "start": "node server.js",
+    "lint": "node --check server.js && node --check script.js && node --check ncdot-progress-dashboard.js && node --check validation.test.js",
+    "build": "node validation.test.js",
+    "test": "node validation.test.js"
+  }
+}
