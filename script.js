@@ -33,45 +33,33 @@ const skyIcons = {
 };
 
 function refreshIcons() {
-  if (window.lucide) {
-    window.lucide.createIcons();
-  }
+  if (window.lucide) window.lucide.createIcons();
 }
 
 function isStaticDeployment() {
   return window.location.protocol === "file:" || window.location.hostname.endsWith(".github.io");
 }
 
-function initPreviewState() {
-  const previewBadge = document.getElementById("previewBadge");
-  if (!previewBadge) return;
-  previewBadge.hidden = !window.location.pathname.startsWith("/preview");
+function renderHomeOverview() {
+  const { projects } = window.PulseDeckData;
+  const onSchedule = projects.filter((project) => project.status === "Active / On Schedule").length;
+  const atRisk = projects.filter((project) => project.status === "Under Review").length;
+  const delayed = projects.filter((project) => project.status === "Delayed / Behind Schedule").length;
+  const syncState = window.PulseDeckSync.read();
+
+  document.getElementById("homeTotalContracts").textContent = projects.length;
+  document.getElementById("homeOnSchedule").textContent = onSchedule;
+  document.getElementById("homeAtRisk").textContent = atRisk;
+  document.getElementById("homeDelayed").textContent = delayed;
+  document.getElementById("homeSyncSummary").textContent =
+    `HiCAMS updated ${window.PulseDeckSync.formatSyncDate(syncState.lastSyncAt)}`;
 }
 
-function initClock() {
-  updateClock();
-  window.setInterval(updateClock, 30_000);
-}
-
-function updateClock() {
-  const now = new Date();
-  const dayLabel = document.getElementById("dayLabel");
-  const timeLabel = document.getElementById("timeLabel");
-
-  if (dayLabel) {
-    dayLabel.textContent = now.toLocaleDateString([], {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
-  }
-
-  if (timeLabel) {
-    timeLabel.textContent = now.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
+function preservePreviewNavigation() {
+  if (!window.location.pathname.startsWith("/preview")) return;
+  document.querySelectorAll('a[href="project-dashboard/"]').forEach((link) => {
+    link.href = "/preview/project-dashboard/";
+  });
 }
 
 function initWeatherCanvas() {
@@ -115,7 +103,7 @@ async function loadWeatherCanvas() {
 
   if (weatherUpdated) {
     weatherUpdated.textContent = successCount
-      ? `Updated ${updatedTime} · ${successCount}/${weatherLocations.length} hubs`
+      ? `${updatedTime} · ${successCount}/${weatherLocations.length} reporting`
       : "NWS unavailable";
   }
 }
@@ -125,17 +113,12 @@ async function fetchNwsForecast(location) {
   const pointData = await fetchNwsJson(pointUrl);
   const forecastUrl = pointData?.properties?.forecast;
 
-  if (!forecastUrl) {
-    throw new Error(`Forecast URL missing for ${location.city}`);
-  }
+  if (!forecastUrl) throw new Error(`Forecast URL missing for ${location.city}`);
 
   const forecastData = await fetchNwsJson(forecastUrl);
   const currentPeriod = forecastData?.properties?.periods?.[0];
 
-  if (!currentPeriod) {
-    throw new Error(`Forecast periods missing for ${location.city}`);
-  }
-
+  if (!currentPeriod) throw new Error(`Forecast periods missing for ${location.city}`);
   return currentPeriod;
 }
 
@@ -145,34 +128,22 @@ async function fetchNwsJson(url) {
   try {
     return await fetchJson(requestUrl);
   } catch (error) {
-    if (requestUrl !== url) {
-      return fetchJson(url);
-    }
+    if (requestUrl !== url) return fetchJson(url);
     throw error;
   }
 }
 
 function buildNwsProxyUrl(url) {
   const nwsUrl = new URL(url);
-
-  if (nwsUrl.origin !== NWS_API_ORIGIN) {
-    throw new Error("Unexpected NWS forecast URL.");
-  }
-
+  if (nwsUrl.origin !== NWS_API_ORIGIN) throw new Error("Unexpected NWS forecast URL.");
   return `/api/nws?${new URLSearchParams({ url: nwsUrl.href }).toString()}`;
 }
 
 async function fetchJson(url) {
   const response = await fetch(url, {
-    headers: {
-      Accept: "application/geo+json, application/json",
-    },
+    headers: { Accept: "application/geo+json, application/json" },
   });
-
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
-
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json();
 }
 
@@ -181,7 +152,7 @@ function renderWeatherCard(city, period) {
   if (!card) return;
 
   const skin = getWeatherSkin(period.shortForecast, period.icon);
-  card.className = `material-card weather-card ${skin.className}`;
+  card.className = `material-card weather-card compact-weather-card ${skin.className}`;
   card.querySelector(".weather-temp").textContent = `${period.temperature}\u00b0${period.temperatureUnit}`;
   card.querySelector(".weather-sky-element").innerHTML = skin.icon;
   card.querySelector(".weather-condition").textContent = period.shortForecast;
@@ -193,7 +164,7 @@ function renderWeatherError(city, error) {
   const card = findWeatherCard(city);
   if (!card) return;
 
-  card.className = "material-card weather-card is-hazard";
+  card.className = "material-card weather-card compact-weather-card is-hazard";
   card.querySelector(".weather-temp").textContent = "--\u00b0F";
   card.querySelector(".weather-sky-element").innerHTML = skyIcons.hazard;
   card.querySelector(".weather-condition").textContent = "Forecast unavailable";
@@ -212,31 +183,26 @@ function setWeatherLoadingState(isLoading) {
 
 function getWeatherSkin(shortForecast = "", iconUrl = "") {
   const text = `${shortForecast} ${iconUrl}`.toLowerCase();
-
   if (text.includes("rain") || text.includes("showers") || text.includes("thunder")) {
     return { className: "is-rainy", icon: skyIcons.rainy };
   }
-
   if (text.includes("sunny") || text.includes("clear")) {
     return { className: "is-sunny", icon: skyIcons.sunny };
   }
-
   if (text.includes("cloudy") || text.includes("overcast")) {
     return { className: "is-cloudy", icon: skyIcons.cloudy };
   }
-
   if (text.includes("fog") || text.includes("wind") || text.includes("snow") || text.includes("hazard")) {
     return { className: "is-hazard", icon: skyIcons.hazard };
   }
-
   return { className: "is-cloudy", icon: skyIcons.cloudy };
 }
 
-function bootPulseDeck() {
-  initPreviewState();
-  initClock();
+function bootHome() {
+  preservePreviewNavigation();
+  renderHomeOverview();
   initWeatherCanvas();
   refreshIcons();
 }
 
-document.addEventListener("DOMContentLoaded", bootPulseDeck);
+document.addEventListener("DOMContentLoaded", bootHome);
