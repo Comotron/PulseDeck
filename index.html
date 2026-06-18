@@ -5,88 +5,58 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="PulseDeck provides North Carolina weather and NCDOT construction project monitoring with HiCAMS status."
+      content="PulseDeck provides North Carolina weather and executive NCDOT construction monitoring."
     >
     <meta name="theme-color" content="#0b57d0">
-    <title>PulseDeck | NCDOT Project Monitoring</title>
+    <title>PulseDeck | North Carolina Transportation Intelligence</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
       href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@500;600&display=swap"
       rel="stylesheet"
     >
-    <link rel="stylesheet" href="material-design.css?v=20260618-3">
+    <link rel="stylesheet" href="material-design.css?v=20260618-4">
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
-
-    <header class="site-header">
-      <div class="header-main">
-        <a class="brand" href="#top" aria-label="PulseDeck home">
-          <span class="brand-icon" aria-hidden="true">
-            <svg viewBox="0 0 40 40" focusable="false">
-              <path d="M6 22h8l3-8 6 15 4-9h7"></path>
-            </svg>
-          </span>
-          <span>
-            <strong>PulseDeck</strong>
-            <small>NCDOT / North Carolina project monitoring</small>
-          </span>
-        </a>
-
-        <div class="header-status" aria-label="Current system status">
-          <div class="header-status-item">
-            <span class="status-indicator status-ok" aria-hidden="true"></span>
-            <span>
-              <small>HiCAMS</small>
-              <strong id="headerSyncStatus">Sync status loading</strong>
-            </span>
-          </div>
-          <div class="header-status-item">
-            <i data-lucide="clock-3" aria-hidden="true"></i>
-            <span>
-              <small id="dayLabel">Today</small>
-              <strong id="timeLabel">--:--</strong>
-            </span>
-          </div>
-          <span id="previewBadge" class="preview-badge" hidden>Review preview</span>
-        </div>
-      </div>
-
-      <nav class="site-nav" aria-label="Primary navigation">
-        <a href="#weather"><i data-lucide="cloud-sun" aria-hidden="true"></i> Weather</a>
-        <a href="#ncdot"><i data-lucide="hard-hat" aria-hidden="true"></i> Project dashboard</a>
-        <button data-section="projects" type="button">
-          <i data-lucide="table-2" aria-hidden="true"></i> Active projects
-        </button>
-      </nav>
-    </header>
+    <pulse-header active="home" root="."></pulse-header>
 
     <main id="main-content">
-      <div id="top" class="page-container">
+      <div class="page-container home-page">
+        <section class="home-hero" aria-labelledby="home-title">
+          <div>
+            <p class="section-label">Statewide operations overview</p>
+            <h1 id="home-title">North Carolina transportation intelligence, at a glance</h1>
+            <p>
+              Live regional weather and executive NCDOT delivery signals in one focused operational view.
+            </p>
+          </div>
+          <a class="material-button filled hero-action" href="project-dashboard/">
+            Open Project Dashboard
+            <i data-lucide="arrow-right" aria-hidden="true"></i>
+          </a>
+        </section>
+
         <section id="weather" class="page-section-block" aria-labelledby="weather-title">
-          <div class="section-heading">
+          <div class="section-heading compact-heading">
             <div>
               <p class="section-label">National Weather Service</p>
-              <h1 id="weather-title">North Carolina Weather</h1>
-              <p>Current forecast snapshots for five project-monitoring hubs across the state.</p>
+              <h2 id="weather-title">North Carolina Weather</h2>
+              <p>Compact forecast snapshots for five project-monitoring hubs.</p>
             </div>
             <div class="section-actions">
               <span id="weatherUpdated" class="status-chip">Awaiting NWS</span>
               <button id="refreshWeather" class="material-button tonal" type="button">
                 <i data-lucide="refresh-cw" aria-hidden="true"></i>
-                <span>Refresh weather</span>
+                <span>Refresh</span>
               </button>
             </div>
           </div>
 
-          <div id="weatherGrid" class="weather-grid" aria-live="polite">
-            <article class="material-card weather-card loading" data-city="Benson">
+          <div id="weatherGrid" class="weather-grid compact-weather-grid" aria-live="polite">
+            <article class="material-card weather-card compact-weather-card loading" data-city="Benson">
               <div class="weather-card-header">
-                <div>
-                  <p class="weather-city">Benson</p>
-                  <span>North Carolina</span>
-                </div>
+                <p class="weather-city">Benson</p>
                 <span class="weather-led" aria-hidden="true"></span>
               </div>
               <div class="weather-reading">
@@ -97,12 +67,9 @@
               <p class="weather-meta">35.3815, -78.5486</p>
             </article>
 
-            <article class="material-card weather-card loading" data-city="Raleigh">
+            <article class="material-card weather-card compact-weather-card loading" data-city="Raleigh">
               <div class="weather-card-header">
-                <div>
-                  <p class="weather-city">Raleigh</p>
-                  <span>North Carolina</span>
-                </div>
+                <p class="weather-city">Raleigh</p>
                 <span class="weather-led" aria-hidden="true"></span>
               </div>
               <div class="weather-reading">
@@ -113,12 +80,9 @@
               <p class="weather-meta">35.7796, -78.6382</p>
             </article>
 
-            <article class="material-card weather-card loading" data-city="Fayetteville">
+            <article class="material-card weather-card compact-weather-card loading" data-city="Fayetteville">
               <div class="weather-card-header">
-                <div>
-                  <p class="weather-city">Fayetteville</p>
-                  <span>North Carolina</span>
-                </div>
+                <p class="weather-city">Fayetteville</p>
                 <span class="weather-led" aria-hidden="true"></span>
               </div>
               <div class="weather-reading">
@@ -129,12 +93,9 @@
               <p class="weather-meta">35.0527, -78.8784</p>
             </article>
 
-            <article class="material-card weather-card loading" data-city="Greensboro">
+            <article class="material-card weather-card compact-weather-card loading" data-city="Greensboro">
               <div class="weather-card-header">
-                <div>
-                  <p class="weather-city">Greensboro</p>
-                  <span>North Carolina</span>
-                </div>
+                <p class="weather-city">Greensboro</p>
                 <span class="weather-led" aria-hidden="true"></span>
               </div>
               <div class="weather-reading">
@@ -145,12 +106,9 @@
               <p class="weather-meta">36.0726, -79.7920</p>
             </article>
 
-            <article class="material-card weather-card loading" data-city="Charlotte">
+            <article class="material-card weather-card compact-weather-card loading" data-city="Charlotte">
               <div class="weather-card-header">
-                <div>
-                  <p class="weather-city">Charlotte</p>
-                  <span>North Carolina</span>
-                </div>
+                <p class="weather-city">Charlotte</p>
                 <span class="weather-led" aria-hidden="true"></span>
               </div>
               <div class="weather-reading">
@@ -163,257 +121,62 @@
           </div>
         </section>
 
-        <section id="ncdot" class="page-section-block project-hub" aria-labelledby="ncdot-title">
-          <div class="section-heading ncdot-heading">
-            <div>
-              <p class="section-label">HiCAMS construction data</p>
-              <h2 id="ncdot-title">NCDOT Construction Project Progress Dashboard</h2>
-              <p>
-                Financial, physical, schedule, and delivery status for active North Carolina transportation contracts.
-              </p>
-            </div>
-            <div class="sync-summary">
-              <span class="status-indicator status-ok" aria-hidden="true"></span>
-              <span>
-                <small id="dataCycleStatus">HiCAMS Sync Complete</small>
-                <strong id="dataCycleTime">Loading latest cycle</strong>
-              </span>
-            </div>
-          </div>
-
-          <nav class="dashboard-tabs" aria-label="NCDOT dashboard views">
-            <button class="active" data-section="dashboard" type="button">
-              <i data-lucide="layout-dashboard" aria-hidden="true"></i>
-              Overview
-            </button>
-            <button data-section="projects" type="button">
-              <i data-lucide="table-2" aria-hidden="true"></i>
-              Active projects
-            </button>
-            <button data-section="settings" type="button">
-              <i data-lucide="settings" aria-hidden="true"></i>
-              HiCAMS settings
-            </button>
-          </nav>
-
-          <section id="dashboard" class="dashboard-view active" aria-labelledby="dashboard-title">
-            <div class="dashboard-hero material-card elevated-card">
+        <section class="home-dashboard-overview" aria-labelledby="overview-title">
+          <article class="material-card overview-card elevated-card">
+            <div class="overview-copy">
+              <span class="overview-icon"><i data-lucide="hard-hat" aria-hidden="true"></i></span>
               <div>
-                <p class="section-label">Executive summary</p>
-                <h3 id="dashboard-title">North Carolina construction delivery at a glance</h3>
+                <p class="section-label">NCDOT construction delivery</p>
+                <h2 id="overview-title">Project monitoring powered by HiCAMS</h2>
                 <p>
-                  Review project progress, schedule risk, current estimates, and official NCDOT references from the active
-                  HiCAMS monitoring cycle.
+                  Review contract estimates, physical completion, schedule risk, recent activity, and official NCDOT
+                  references in the dedicated project workspace.
                 </p>
               </div>
-              <div class="data-cycle-card">
-                <div class="data-cycle-icon"><i data-lucide="database-zap" aria-hidden="true"></i></div>
-                <div>
-                  <small>Current data cycle</small>
-                  <strong>HiCAMS nightly construction data</strong>
-                  <p id="nextSyncLabel">Next daily refresh scheduled for 2:00 AM ET</p>
-                </div>
+            </div>
+
+            <div id="homeQuickStats" class="home-stat-grid" aria-label="NCDOT project summary">
+              <div class="home-stat">
+                <span>Active contracts</span>
+                <strong id="homeTotalContracts">--</strong>
+              </div>
+              <div class="home-stat success">
+                <span>On schedule</span>
+                <strong id="homeOnSchedule">--</strong>
+              </div>
+              <div class="home-stat warning">
+                <span>At risk</span>
+                <strong id="homeAtRisk">--</strong>
+              </div>
+              <div class="home-stat critical">
+                <span>Delayed</span>
+                <strong id="homeDelayed">--</strong>
               </div>
             </div>
 
-            <div id="metricStrip" class="metric-grid"></div>
-
-            <div class="dashboard-columns">
-              <article class="material-card dashboard-panel">
-                <div class="panel-heading">
-                  <div>
-                    <h3>Program status</h3>
-                    <p>Financial and physical progress from the current estimate cycle.</p>
-                  </div>
-                  <button class="material-button text-button" data-section="projects" type="button">
-                    View all projects <i data-lucide="arrow-right" aria-hidden="true"></i>
-                  </button>
-                </div>
-                <div class="summary-table" role="table" aria-label="Program status by contract">
-                  <div class="summary-grid-head" role="row">
-                    <span role="columnheader">STIP ID</span>
-                    <span role="columnheader">Division</span>
-                    <span role="columnheader">Route</span>
-                    <span role="columnheader">Physical</span>
-                    <span role="columnheader">Status</span>
-                  </div>
-                  <div id="dashboardProjectRows" class="summary-grid-body" role="rowgroup"></div>
-                </div>
-              </article>
-
-              <article class="material-card dashboard-panel">
-                <div class="panel-heading">
-                  <div>
-                    <h3>Recent activity</h3>
-                    <p>HiCAMS sync events and project milestone updates.</p>
-                  </div>
-                </div>
-                <ol id="activityLog" class="activity-list"></ol>
-              </article>
+            <div class="overview-footer">
+              <span class="overview-sync">
+                <span class="status-indicator status-ok" aria-hidden="true"></span>
+                <span id="homeSyncSummary">HiCAMS sync status loading</span>
+              </span>
+              <a class="material-button filled" href="project-dashboard/">
+                Open Project Dashboard
+                <i data-lucide="arrow-right" aria-hidden="true"></i>
+              </a>
             </div>
-          </section>
-
-          <section id="projects" class="dashboard-view" aria-labelledby="projects-title">
-            <div class="view-heading">
-              <div>
-                <p class="section-label">Active projects grid</p>
-                <h3 id="projects-title">Contract tracking</h3>
-                <p>Search, filter, sort, and open detailed HiCAMS project records.</p>
-              </div>
-              <button id="resetProjectFilters" class="material-button outlined" type="button">
-                <i data-lucide="rotate-ccw" aria-hidden="true"></i>
-                Reset filters
-              </button>
-            </div>
-
-            <div class="material-card filter-bar">
-              <label class="search-field">
-                <span>Search projects</span>
-                <span class="input-with-icon">
-                  <i data-lucide="search" aria-hidden="true"></i>
-                  <input
-                    id="projectSearch"
-                    class="control-input"
-                    type="search"
-                    autocomplete="off"
-                    placeholder="STIP, route, county, contractor"
-                  >
-                </span>
-              </label>
-              <label>
-                <span>Status</span>
-                <select id="statusFilter" class="control-input">
-                  <option value="all">All statuses</option>
-                </select>
-              </label>
-              <label>
-                <span>Division</span>
-                <select id="divisionFilter" class="control-input">
-                  <option value="all">All divisions</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="material-card project-table-card">
-              <div class="table-toolbar">
-                <p id="projectCountLabel"></p>
-                <div id="activeFilterChips" class="filter-chips"></div>
-              </div>
-              <div class="project-data-grid" role="table" aria-label="Active NCDOT projects">
-                <div class="project-grid-header" role="row">
-                  <span role="columnheader"><button data-sort="stip" type="button">STIP <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader"><button data-sort="contract" type="button">Contract <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader"><button data-sort="division" type="button">Division <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader"><button data-sort="county" type="button">County <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader"><button data-sort="description" type="button">Description / Route <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader"><button data-sort="contractor" type="button">Contractor <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader"><button data-sort="financial" type="button">Financial <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader"><button data-sort="physical" type="button">Physical <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader"><button data-sort="status" type="button">Status <i data-lucide="arrow-up-down"></i></button></span>
-                  <span role="columnheader">NCDOT</span>
-                </div>
-                <div id="projectsTableBody" class="project-grid-body" role="rowgroup"></div>
-              </div>
-            </div>
-          </section>
-
-          <section id="settings" class="dashboard-view" aria-labelledby="settings-title">
-            <div class="view-heading">
-              <div>
-                <p class="section-label">HiCAMS integration</p>
-                <h3 id="settings-title">Data and display settings</h3>
-                <p>Manage the visible sync state and project-reference preferences.</p>
-              </div>
-            </div>
-
-            <div class="settings-grid">
-              <article class="material-card settings-card">
-                <div class="panel-heading">
-                  <div>
-                    <h3>Data feed</h3>
-                    <p>Current HiCAMS integration settings.</p>
-                  </div>
-                </div>
-                <div class="settings-list">
-                  <div class="settings-row">
-                    <div>
-                      <strong>HiCAMS nightly estimate sync</strong>
-                      <p id="autoSyncMeta">Runs daily at 2:00 AM ET</p>
-                    </div>
-                    <span class="status-chip success">Daily</span>
-                  </div>
-                  <div class="settings-row">
-                    <div>
-                      <strong>Manual data refresh</strong>
-                      <p id="manualSyncMeta">Ready to force a HiCAMS sync</p>
-                    </div>
-                    <button id="forceSyncButton" class="material-button filled" type="button">
-                      <i data-lucide="refresh-cw" aria-hidden="true"></i>
-                      <span>Force sync</span>
-                    </button>
-                  </div>
-                  <div class="settings-row">
-                    <div>
-                      <strong>Client-facing financial details</strong>
-                      <p>Show budget, spent-to-date, and remaining allocation.</p>
-                    </div>
-                    <button class="toggle-button active" type="button" aria-pressed="true">Enabled</button>
-                  </div>
-                  <div class="settings-row">
-                    <div>
-                      <strong>Critical delay threshold</strong>
-                      <p>Flag projects 14 days or more behind baseline.</p>
-                    </div>
-                    <span class="status-chip error">14 days</span>
-                  </div>
-                </div>
-              </article>
-
-              <article class="material-card settings-card">
-                <div class="panel-heading">
-                  <div>
-                    <h3>Project links</h3>
-                    <p>Official NCDOT reference behavior.</p>
-                  </div>
-                </div>
-                <div class="preference-grid">
-                  <button class="preference-card active" type="button">
-                    <i data-lucide="external-link" aria-hidden="true"></i>
-                    <span>Open official NCDOT pages</span>
-                  </button>
-                  <button class="preference-card" type="button">
-                    <i data-lucide="file-search" aria-hidden="true"></i>
-                    <span>Show project references</span>
-                  </button>
-                </div>
-                <p class="settings-note">
-                  External links open the corresponding official NCDOT project page in a new tab.
-                </p>
-              </article>
-            </div>
-          </section>
+          </article>
         </section>
       </div>
     </main>
 
     <footer class="site-footer">
       <span>PulseDeck Material Design</span>
-      <span>North Carolina weather and NCDOT project monitoring</span>
+      <span>North Carolina Transportation Intelligence</span>
     </footer>
 
-    <div id="drawerBackdrop" class="drawer-backdrop hidden" aria-hidden="true"></div>
-    <aside
-      id="projectDrawer"
-      class="project-drawer hidden"
-      aria-labelledby="drawerTitle"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div id="drawerContent"></div>
-    </aside>
-
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script src="script.js?v=20260618-2"></script>
-    <script src="ncdot-progress-dashboard.js?v=20260618-2"></script>
+    <script src="project-data.js?v=20260618-4"></script>
+    <script src="shared-header.js?v=20260618-4"></script>
+    <script src="script.js?v=20260618-4"></script>
   </body>
 </html>

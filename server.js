@@ -38,10 +38,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    const staticPath =
-      requestUrl.pathname === "/preview" || requestUrl.pathname === "/preview/"
-        ? "/index.html"
-        : requestUrl.pathname;
+    const staticPath = resolveStaticPath(requestUrl.pathname);
     serveStaticFile(staticPath, response);
   } catch (error) {
     sendJson(response, 500, {
@@ -54,7 +51,25 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, () => {
   console.log(`PulseDeck running at http://localhost:${PORT}`);
   console.log(`Review preview: http://localhost:${PORT}/preview`);
+  console.log(`Dashboard preview: http://localhost:${PORT}/preview/project-dashboard/`);
 });
+
+function resolveStaticPath(pathname) {
+  let resolvedPath = pathname;
+
+  if (resolvedPath === "/preview") {
+    resolvedPath = "/";
+  } else if (resolvedPath.startsWith("/preview/")) {
+    resolvedPath = resolvedPath.slice("/preview".length) || "/";
+  }
+
+  if (resolvedPath === "/") return "/index.html";
+  if (resolvedPath === "/project-dashboard" || resolvedPath === "/project-dashboard/") {
+    return "/project-dashboard/index.html";
+  }
+  if (resolvedPath.endsWith("/")) return `${resolvedPath}index.html`;
+  return resolvedPath;
+}
 
 async function handleNwsProxy(request, requestUrl, response) {
   if (request.method === "OPTIONS") {
@@ -107,7 +122,7 @@ function normalizeNwsUrl(value) {
 }
 
 function serveStaticFile(pathname, response) {
-  const decodedPath = decodeURIComponent(pathname === "/" ? "/index.html" : pathname);
+  const decodedPath = decodeURIComponent(pathname);
   const filePath = path.resolve(ROOT, `.${decodedPath}`);
   const relativePath = path.relative(ROOT, filePath);
 

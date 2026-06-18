@@ -4,10 +4,10 @@ PulseDeck uses a focused Material Design interface for North Carolina weather an
 
 ## Product scope
 
-The site intentionally contains only:
+The site intentionally contains two routes:
 
-- North Carolina Weather, powered by National Weather Service forecast data.
-- NCDOT Construction Project Progress Dashboard, with HiCAMS sync state, project filtering, sorting, detail views, and official NCDOT links.
+- `/` — executive Home overview with compact North Carolina weather and a concise NCDOT status summary.
+- `/project-dashboard/` — NCDOT Construction Project Progress Dashboard with HiCAMS sync state, semantic KPI cards, contract tracking, sorting, filtering, detail views, and official NCDOT links.
 
 ## Design foundations
 
@@ -23,10 +23,13 @@ The shared implementation lives in `material-design.css`.
 
 ## Application structure
 
-- `index.html` contains the complete website structure.
-- `script.js` owns the weather and header behavior.
-- `ncdot-progress-dashboard.js` owns project data, filters, sorting, details, and HiCAMS sync state.
-- `server.js` serves the site, provides the `/preview` review route, and proxies approved NWS requests.
+- `index.html` contains the Home route.
+- `project-dashboard/index.html` contains the dedicated Project Dashboard route.
+- `shared-header.js` renders the identical global header and navigation on both routes.
+- `project-data.js` is the shared project, activity, and status dataset.
+- `script.js` owns Home weather and overview behavior.
+- `ncdot-progress-dashboard.js` owns dashboard filters, sorting, details, and HiCAMS sync state.
+- `server.js` serves both routes, mirrors them under `/preview`, and proxies approved NWS requests.
 
 ## Preview workflow
 
@@ -34,7 +37,11 @@ Run the local server and open:
 
 `http://localhost:8787/preview`
 
-The preview route serves the same implementation as the main page while clearly identifying review mode. Do not merge the redesign branch until the preview is approved.
+Dashboard preview:
+
+`http://localhost:8787/preview/project-dashboard/`
+
+The preview routes serve the same implementation while clearly identifying review mode. Do not merge the redesign branch until the preview is approved.
 
 ## Validation
 
