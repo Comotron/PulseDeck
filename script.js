@@ -1,11 +1,9 @@
 const NWS_API_ORIGIN = "https://api.weather.gov";
-const NWS_LOCAL_PROXY_ORIGIN = "http://localhost:8787";
 
 // Update cadence lives here so future widgets can tune refresh timing without touching render logic.
 const WEATHER_REFRESH_MS = 30 * 60 * 1000;
 const MARKET_REFRESH_MS = 60 * 1000;
 const TRAVEL_REFRESH_MS = 60 * 1000;
-const SPORTS_REFRESH_MS = 60 * 1000;
 
 const weatherLocations = [
   { city: "Benson", state: "NC", lat: 35.3815, lon: -78.5486 },
@@ -77,20 +75,13 @@ const travelFeedDot = document.querySelector("#travelFeedDot");
 const travelSummary = document.querySelector("#travelSummary");
 const airportPulseGrid = document.querySelector("#airportPulseGrid");
 const transitPulse = document.querySelector("#transitPulse");
-const sportsStatusChip = document.querySelector("#sportsStatusChip");
-const sportsUpdated = document.querySelector("#sportsUpdated");
-const refreshSportsButton = document.querySelector("#refreshSports");
-const sportsFeedDot = document.querySelector("#sportsFeedDot");
-const sportsPulseGrid = document.querySelector("#sportsPulseGrid");
 
 let marketRequestInFlight = false;
 let travelRequestInFlight = false;
-let sportsRequestInFlight = false;
 
 function initDashboard() {
   initClock();
   initWeatherCanvas();
-  initSportsPulse();
   initTravelPulse();
   initMarketPulse();
   initRouteMonitor();
@@ -101,6 +92,10 @@ function refreshIcons() {
   if (window.lucide) {
     window.lucide.createIcons();
   }
+}
+
+function isStaticDeployment() {
+  return window.location.protocol === "file:" || window.location.hostname.endsWith(".github.io");
 }
 
 function initClock() {
@@ -171,21 +166,20 @@ async function fetchNwsForecast(location) {
 }
 
 async function fetchNwsJson(url) {
-  const proxyUrl = buildNwsProxyUrl(url);
-  const localProxyUrl = buildNwsProxyUrl(url, { forceLocal: true });
+  const requestUrl = isStaticDeployment() ? url : buildNwsProxyUrl(url);
 
   try {
-    return await fetchJson(proxyUrl);
+    return await fetchJson(requestUrl, { "Accept": "application/geo+json" });
   } catch (error) {
-    if (proxyUrl !== localProxyUrl && isMissingNwsProxy(error)) {
-      return fetchJson(localProxyUrl);
+    if (requestUrl !== url) {
+      return fetchJson(url, { "Accept": "application/geo+json" });
     }
 
     throw error;
   }
 }
 
-function buildNwsProxyUrl(url, { forceLocal = false } = {}) {
+function buildNwsProxyUrl(url) {
   const nwsUrl = new URL(url);
 
   if (nwsUrl.origin !== NWS_API_ORIGIN) {
@@ -193,17 +187,7 @@ function buildNwsProxyUrl(url, { forceLocal = false } = {}) {
   }
 
   const params = new URLSearchParams({ url: nwsUrl.href });
-  const proxyPath = `/api/nws?${params.toString()}`;
-
-  if (forceLocal || window.location.protocol === "file:") {
-    return `${NWS_LOCAL_PROXY_ORIGIN}${proxyPath}`;
-  }
-
-  return proxyPath;
-}
-
-function isMissingNwsProxy(error) {
-  return String(error?.message || "").includes("404");
+  return `/api/nws?${params.toString()}`;
 }
 
 async function fetchJson(url, headers = { "Accept": "application/json" }) {
@@ -268,407 +252,13 @@ function getWeatherSkin(shortForecast = "", iconUrl = "") {
   return { className: "is-cloudy", icon: skyIcons.cloudy };
 }
 
-function initSportsPulse() {
-  if (!sportsPulseGrid || !refreshSportsButton) {
-    return;
-  }
-
-  renderSportsSkeleton();
-  refreshSportsButton.addEventListener("click", () => loadSportsPulse(true));
-  loadSportsPulse();
-  setInterval(loadSportsPulse, SPORTS_REFRESH_MS);
-}
-
-async function loadSportsPulse(force = false) {
-  if (sportsRequestInFlight) {
-    return;
-  }
-
-  sportsRequestInFlight = true;
-  setSportsLoadingState(true);
-
-  try {
-    if (window.location.protocol === "file:") {
-      throw new Error("Start the live hub server to enable sports signals.");
-    }
-
-    const cacheParam = force ? "?force=1" : "";
-    const data = await fetchJsonWithClientTimeout(`/api/sports${cacheParam}`, 11000);
-    renderSportsPulse(data);
-  } catch (error) {
-    renderSportsError(error);
-  } finally {
-    sportsRequestInFlight = false;
-    setSportsLoadingState(false);
-  }
-}
-
-async function fetchJsonWithClientTimeout(url, timeoutMs = 9000) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      headers: { "Accept": "application/json" },
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
-    }
-
-    return response.json();
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      throw new Error("Sports provider timed out.");
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function renderSportsSkeleton() {
-  sportsPulseGrid.innerHTML = ["NBA Today", "NBA Stat Signal", "F1 Weekend", "Premier League / FPL"]
-    .map((label) => `
-      <article class="glass sports-card loading">
-        <div class="sports-card-header">
-          <div>
-            <span class="sports-card-kicker">${escapeHtml(label)}</span>
-            <h4>Connecting</h4>
-          </div>
-          <i data-lucide="${label.includes("F1") ? "gauge" : label.includes("Premier") ? "shield" : "activity"}"></i>
-        </div>
-        <div class="sports-skeleton-stack">
-          <span class="sports-skeleton-line wide"></span>
-          <span class="sports-skeleton-line"></span>
-          <span class="sports-skeleton-line short"></span>
-        </div>
-      </article>
-    `)
-    .join("");
-  refreshIcons();
-}
-
-function renderSportsPulse(data) {
-  const providers = data.providers || {};
-  const status = data.status || "cached";
-
-  sportsStatusChip.textContent = formatSportsStatus(status);
-  sportsStatusChip.className = `sports-status-chip status-${getSportsStatusTone(status)}`;
-  sportsUpdated.textContent = `Updated ${formatSportsTime(data.updatedAt)}`;
-  sportsFeedDot.className = getSportsDotClass(status);
-  sportsPulseGrid.innerHTML = [
-    renderNbaTodayCard(data.nbaGames || [], providers.nbaGames || {}),
-    renderNbaSignalCard(data.nbaSignal || {}),
-    renderF1Card(data.f1Signal || {}),
-    renderEplCard(data.eplSignal || {})
-  ].join("");
-  refreshIcons();
-}
-
-function renderNbaTodayCard(games, provider) {
-  const hasKey = !provider.needsApiKey;
-  const body = !hasKey
-    ? renderSportsEmptyState("Needs API Key", "Add BALLDONTLIE_API_KEY on the server.")
-    : games.length
-      ? `<div class="sports-ticker-list">${games.slice(0, 4).map(renderNbaGameRow).join("")}</div>`
-      : renderSportsEmptyState("No NBA games today", "Stat Signal stays active below.");
-
-  return `
-    <article class="glass sports-card sports-card-nba ${provider.needsApiKey ? "needs-key" : ""}">
-      <div class="sports-card-header">
-        <div>
-          <span class="sports-card-kicker">NBA Today</span>
-          <h4>Game board</h4>
-        </div>
-        <span class="sports-mini-chip ${provider.needsApiKey ? "is-key" : "is-live"}">${provider.needsApiKey ? "Needs key" : "Scores"}</span>
-      </div>
-      ${body}
-      <p class="sports-card-foot">${escapeHtml(provider.message || "balldontlie score feed")}</p>
-    </article>
-  `;
-}
-
-function renderNbaGameRow(game) {
-  const awayLeader = game.away?.isLeader ? " is-leading" : "";
-  const homeLeader = game.home?.isLeader ? " is-leading" : "";
-  const hasScore = Number.isFinite(game.away?.score) || Number.isFinite(game.home?.score);
-  const score = hasScore
-    ? `${formatSportsScore(game.away?.score)} - ${formatSportsScore(game.home?.score)}`
-    : "vs";
-  const status = game.status || {};
-  const detail = status.detail && status.detail !== status.label ? `${status.label} / ${status.detail}` : status.label || "Scheduled";
-
-  return `
-    <div class="sports-ticker-row tone-${escapeHtml(game.tone || status.tone || "scheduled")}">
-      <div class="sports-matchup">
-        <strong>
-          <span class="sports-team${awayLeader}">${escapeHtml(game.away?.abbreviation || "AWY")}</span>
-          <span>@</span>
-          <span class="sports-team${homeLeader}">${escapeHtml(game.home?.abbreviation || "HOME")}</span>
-        </strong>
-        <span>${escapeHtml(detail || "Scheduled")}</span>
-      </div>
-      <b>${escapeHtml(score)}</b>
-    </div>
-  `;
-}
-
-function renderNbaSignalCard(signal) {
-  const leaders = Array.isArray(signal.leaders) ? signal.leaders : [];
-  const body = leaders.length
-    ? `
-      <div class="sports-hero-stat">
-        <span>${escapeHtml(signal.label || "Top scorer")}</span>
-        <strong>${escapeHtml(signal.headline || "Leaders pending")}</strong>
-        <em>${escapeHtml(signal.detail || formatNbaSeason(signal.season))}</em>
-      </div>
-      <div class="sports-compact-list">
-        ${leaders.slice(0, 3).map((leader, index) => `
-          <div class="sports-compact-row ${index === 0 ? "is-positive" : ""}">
-            <span>${escapeHtml(leader.playerName)}</span>
-            <strong>${escapeHtml(leader.statLine || "--")}</strong>
-          </div>
-        `).join("")}
-      </div>
-    `
-    : renderSportsEmptyState(signal.status === "error" ? "Stats offline" : "Leaders pending", signal.detail || "NBA Stats API returned no rows.");
-
-  return `
-    <article class="glass sports-card">
-      <div class="sports-card-header">
-        <div>
-          <span class="sports-card-kicker">NBA Stat Signal</span>
-          <h4>${escapeHtml(formatNbaSeason(signal.season))}</h4>
-        </div>
-        <span class="sports-mini-chip ${signal.status === "error" ? "is-danger" : "is-live"}">${signal.status === "error" ? "Offline" : "Leaders"}</span>
-      </div>
-      ${body}
-    </article>
-  `;
-}
-
-function renderF1Card(signal) {
-  const positions = Array.isArray(signal.positions) ? signal.positions : [];
-  const top = signal.topDriver;
-  const body = top
-    ? `
-      <div class="sports-hero-stat">
-        <span>${escapeHtml(signal.meetingName || "Formula 1")}</span>
-        <strong>P${escapeHtml(top.position || "1")} ${escapeHtml(top.driver?.abbreviation || "F1")}</strong>
-        <em>${escapeHtml(signal.sessionName || "Session")} ${signal.circuit ? `/ ${escapeHtml(signal.circuit)}` : ""}</em>
-      </div>
-      <div class="sports-compact-list">
-        ${positions.map((row) => `
-          <div class="sports-compact-row ${row.position === 1 ? "is-positive" : ""}">
-            <span>P${escapeHtml(row.position || "--")} ${escapeHtml(row.driver?.abbreviation || row.driver?.name || "--")}</span>
-            <strong>${escapeHtml(row.gap || "--")}</strong>
-          </div>
-        `).join("")}
-      </div>
-      ${renderF1Weather(signal.weather)}
-    `
-    : renderSportsEmptyState(signal.meetingName || "F1 signal pending", signal.detail || "OpenF1 data is unavailable right now.");
-
-  return `
-    <article class="glass sports-card">
-      <div class="sports-card-header">
-        <div>
-          <span class="sports-card-kicker">F1 Weekend</span>
-          <h4>${escapeHtml(signal.sessionName || "Session pulse")}</h4>
-        </div>
-        <span class="sports-mini-chip ${signal.isHistorical ? "is-cached" : "is-live"}">${signal.isHistorical ? "Historical" : "Live"}</span>
-      </div>
-      ${body}
-    </article>
-  `;
-}
-
-function renderEplCard(signal) {
-  const fixtures = Array.isArray(signal.fixtures) ? signal.fixtures : [];
-  const player = signal.topPlayer;
-  const body = `
-    <div class="sports-hero-stat">
-      <span>${escapeHtml(signal.gameweekStatus || "Gameweek")}</span>
-      <strong>${escapeHtml(signal.gameweekLabel || "Gameweek pending")}</strong>
-      <em>${player ? `${escapeHtml(player.name)} / ${escapeHtml(player.team || "--")} / ${formatSportsNumber(player.points)} pts` : escapeHtml(signal.detail || "FPL signal pending.")}</em>
-    </div>
-    ${player ? `
-      <div class="sports-stat-strip">
-        <div><span>Form</span><strong>${formatSportsNumber(player.form)}</strong></div>
-        <div><span>Selected</span><strong>${formatSportsNumber(player.selectedByPercent)}%</strong></div>
-      </div>
-    ` : ""}
-    ${fixtures.length ? `
-      <div class="sports-compact-list">
-        ${fixtures.slice(0, 3).map(renderEplFixtureRow).join("")}
-      </div>
-    ` : renderSportsEmptyState("Fixtures pending", signal.detail || "Upcoming Premier League fixtures are not published yet.")}
-  `;
-
-  return `
-    <article class="glass sports-card">
-      <div class="sports-card-header">
-        <div>
-          <span class="sports-card-kicker">Premier League / FPL</span>
-          <h4>${escapeHtml(signal.fixtureMode || "Gameweek")}</h4>
-        </div>
-        <span class="sports-mini-chip ${signal.status === "error" ? "is-danger" : "is-live"}">FPL</span>
-      </div>
-      ${body}
-    </article>
-  `;
-}
-
-function renderEplFixtureRow(fixture) {
-  const score = Number.isFinite(fixture.homeScore) || Number.isFinite(fixture.awayScore)
-    ? `${formatSportsScore(fixture.homeScore)} - ${formatSportsScore(fixture.awayScore)}`
-    : formatSportsDate(fixture.kickoff);
-
-  return `
-    <div class="sports-compact-row ${fixture.status === "Live" ? "is-positive" : fixture.status === "Final" ? "is-muted" : ""}">
-      <span>${escapeHtml(fixture.away || "Away")} @ ${escapeHtml(fixture.home || "Home")}</span>
-      <strong>${escapeHtml(score)}</strong>
-    </div>
-  `;
-}
-
-function renderF1Weather(weather) {
-  if (!weather) {
-    return "";
-  }
-
-  return `
-    <div class="sports-stat-strip">
-      <div><span>Track</span><strong>${formatCelsius(weather.trackTempC)}</strong></div>
-      <div><span>Air</span><strong>${formatCelsius(weather.airTempC)}</strong></div>
-    </div>
-  `;
-}
-
-function renderSportsEmptyState(title, detail) {
-  return `
-    <div class="sports-empty-state">
-      <strong>${escapeHtml(title)}</strong>
-      <span>${escapeHtml(detail)}</span>
-    </div>
-  `;
-}
-
-function renderSportsError(error) {
-  sportsStatusChip.textContent = "Cached";
-  sportsStatusChip.className = "sports-status-chip status-cached";
-  sportsUpdated.textContent = "Sports offline";
-  sportsFeedDot.className = "status-dot critical";
-  sportsPulseGrid.innerHTML = `
-    <article class="glass sports-card is-error">
-      <div class="sports-card-header">
-        <div>
-          <span class="sports-card-kicker">Sports Pulse</span>
-          <h4>Signal offline</h4>
-        </div>
-        <span class="sports-mini-chip is-danger">Error</span>
-      </div>
-      ${renderSportsEmptyState("Sports feed unavailable", error?.message || "The sports route did not respond.")}
-    </article>
-  `;
-  refreshIcons();
-}
-
-function setSportsLoadingState(isLoading) {
-  if (!refreshSportsButton) {
-    return;
-  }
-
-  refreshSportsButton.disabled = isLoading;
-  refreshSportsButton.classList.toggle("is-loading", isLoading);
-  document.querySelectorAll(".sports-card").forEach((card) => {
-    card.classList.toggle("loading", isLoading);
-  });
-}
-
-function formatSportsStatus(status) {
-  return {
-    live: "Live",
-    cached: "Cached",
-    needs_api_key: "Needs API Key",
-    error: "Cached"
-  }[status] || "Cached";
-}
-
-function getSportsStatusTone(status) {
-  return {
-    live: "live",
-    cached: "cached",
-    needs_api_key: "key",
-    error: "danger"
-  }[status] || "cached";
-}
-
-function getSportsDotClass(status) {
-  if (status === "live") {
-    return "status-dot";
-  }
-
-  if (status === "needs_api_key" || status === "cached") {
-    return "status-dot warning";
-  }
-
-  return "status-dot critical";
-}
-
-function formatSportsScore(value) {
-  return Number.isFinite(value) ? String(value) : "--";
-}
-
-function formatSportsNumber(value) {
-  return Number.isFinite(value) ? Number(value).toLocaleString([], { maximumFractionDigits: 1 }) : "--";
-}
-
-function formatSportsTime(value) {
-  const date = new Date(value || Date.now());
-
-  if (Number.isNaN(date.getTime())) {
-    return "--";
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit"
-  });
-}
-
-function formatSportsDate(value) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Scheduled";
-  }
-
-  return date.toLocaleDateString([], {
-    month: "short",
-    day: "numeric"
-  });
-}
-
-function formatNbaSeason(season) {
-  const numeric = Number(season);
-
-  if (!Number.isFinite(numeric)) {
-    return "Season";
-  }
-
-  return `${numeric - 1}-${String(numeric).slice(-2)}`;
-}
-
-function formatCelsius(value) {
-  return Number.isFinite(value) ? `${Math.round(value)}C` : "--";
-}
-
 function initTravelPulse() {
   if (!travelUpdated || !refreshTravelButton || !airportPulseGrid) {
+    return;
+  }
+
+  if (isStaticDeployment()) {
+    renderTravelStaticFallback();
     return;
   }
 
@@ -866,6 +456,43 @@ function renderTravelError(error) {
   refreshIcons();
 }
 
+function renderTravelStaticFallback() {
+  travelSummary.innerHTML = `
+    <div class="travel-summary-item risk-watch">
+      <span>Best airport</span>
+      <strong>Hub required</strong>
+    </div>
+    <div class="travel-summary-item">
+      <span>Highest risk</span>
+      <strong>No live signal</strong>
+    </div>
+    <div class="travel-summary-item">
+      <span>Network</span>
+      <strong>4 airports tracked</strong>
+    </div>
+    <div class="travel-summary-item">
+      <span>Updated</span>
+      <strong>Static mode</strong>
+    </div>
+  `;
+  airportPulseGrid.innerHTML = travelAirportFallbacks
+    .map((airport) => renderAirportCard({
+      ...airport,
+      flightCategory: "Unknown",
+      risk: { label: "Hub required", tone: "watch", level: 1, reasons: ["Static hosting"] },
+      taf: { summary: "Live airport data is available through the local hub." }
+    }))
+    .join("");
+  travelUpdated.textContent = "Static mode";
+  travelFeedDot.className = "status-dot warning";
+  refreshTravelButton.disabled = true;
+  renderTransitPulse({
+    status: "disabled",
+    message: "Transit data not connected."
+  });
+  refreshIcons();
+}
+
 function setTravelLoadingState(isLoading) {
   refreshTravelButton.disabled = isLoading;
   refreshTravelButton.classList.toggle("is-loading", isLoading);
@@ -908,6 +535,11 @@ function getTravelDotClass(tone = "watch") {
 }
 
 function initMarketPulse() {
+  if (isStaticDeployment()) {
+    renderMarketStaticFallback();
+    return;
+  }
+
   renderMarketSkeleton();
   refreshMarketButton.addEventListener("click", () => loadMarketPulse());
   loadMarketPulse();
@@ -1108,6 +740,27 @@ function renderMarketError(error) {
   `;
   marketUpdated.textContent = "Quotes offline";
   marketFeedDot.className = "status-dot critical";
+}
+
+function renderMarketStaticFallback() {
+  marketSummary.innerHTML = `
+    <div class="market-summary-card">
+      <span>Market feed</span>
+      <strong>Hub required</strong>
+    </div>
+    <div class="market-summary-card">
+      <span>Mode</span>
+      <strong>Static site</strong>
+    </div>
+  `;
+  marketPulseList.innerHTML = `
+    <div class="empty-state market-error">
+      <span>Live quotes are available through the local hub.</span>
+    </div>
+  `;
+  marketUpdated.textContent = "Static mode";
+  marketFeedDot.className = "status-dot warning";
+  refreshMarketButton.disabled = true;
 }
 
 function setMarketLoadingState(isLoading) {

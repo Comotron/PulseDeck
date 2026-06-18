@@ -27,7 +27,6 @@
           <a class="rail-button" href="nws-weather-interface.html" aria-label="Forecast Engine"><i data-lucide="external-link"></i></a>
           <a class="rail-button" href="ncdot-progress-dashboard.html" aria-label="NCDOT Progress"><i data-lucide="hard-hat"></i></a>
           <a class="rail-button" href="malmeroads-live-dashboard.html" aria-label="MalmeRoads"><i data-lucide="map"></i></a>
-          <a class="rail-button" href="#sports" aria-label="Sports"><i data-lucide="trophy"></i></a>
           <a class="rail-button" href="#travel" aria-label="Travel"><i data-lucide="plane"></i></a>
           <a class="rail-button" href="#feeds" aria-label="Data Feeds"><i data-lucide="activity"></i></a>
         </nav>
@@ -134,83 +133,6 @@
             <div>
               <p class="eyebrow">Live signals</p>
               <h2 id="feeds-title" class="section-title">Market & Route Pulse</h2>
-            </div>
-          </div>
-
-          <div id="sports" class="sports-module" aria-labelledby="sports-title">
-            <div class="sports-heading">
-              <div>
-                <p class="eyebrow">Sports ticker</p>
-                <h3 id="sports-title">Sports Pulse</h3>
-                <p class="sports-subtitle">Live scores, standings, and race signals</p>
-              </div>
-              <div class="sports-actions">
-                <span id="sportsStatusChip" class="sports-status-chip status-cached">Connecting</span>
-                <span id="sportsUpdated" class="update-chip">Awaiting sports</span>
-                <button id="refreshSports" class="icon-action" type="button" aria-label="Refresh sports">
-                  <i data-lucide="refresh-cw"></i>
-                </button>
-                <span id="sportsFeedDot" class="status-dot warning"></span>
-              </div>
-            </div>
-
-            <div id="sportsPulseGrid" class="sports-grid" aria-live="polite">
-              <article class="glass sports-card loading">
-                <div class="sports-card-header">
-                  <div>
-                    <span class="sports-card-kicker">NBA Today</span>
-                    <h4>Game board</h4>
-                  </div>
-                  <i data-lucide="activity"></i>
-                </div>
-                <div class="sports-skeleton-stack">
-                  <span class="sports-skeleton-line wide"></span>
-                  <span class="sports-skeleton-line"></span>
-                  <span class="sports-skeleton-line short"></span>
-                </div>
-              </article>
-              <article class="glass sports-card loading">
-                <div class="sports-card-header">
-                  <div>
-                    <span class="sports-card-kicker">NBA Stat Signal</span>
-                    <h4>Leaders</h4>
-                  </div>
-                  <i data-lucide="bar-chart-3"></i>
-                </div>
-                <div class="sports-skeleton-stack">
-                  <span class="sports-skeleton-line wide"></span>
-                  <span class="sports-skeleton-line"></span>
-                  <span class="sports-skeleton-line short"></span>
-                </div>
-              </article>
-              <article class="glass sports-card loading">
-                <div class="sports-card-header">
-                  <div>
-                    <span class="sports-card-kicker">F1 Weekend</span>
-                    <h4>Session pulse</h4>
-                  </div>
-                  <i data-lucide="gauge"></i>
-                </div>
-                <div class="sports-skeleton-stack">
-                  <span class="sports-skeleton-line wide"></span>
-                  <span class="sports-skeleton-line"></span>
-                  <span class="sports-skeleton-line short"></span>
-                </div>
-              </article>
-              <article class="glass sports-card loading">
-                <div class="sports-card-header">
-                  <div>
-                    <span class="sports-card-kicker">Premier League / FPL</span>
-                    <h4>Gameweek</h4>
-                  </div>
-                  <i data-lucide="shield"></i>
-                </div>
-                <div class="sports-skeleton-stack">
-                  <span class="sports-skeleton-line wide"></span>
-                  <span class="sports-skeleton-line"></span>
-                  <span class="sports-skeleton-line short"></span>
-                </div>
-              </article>
             </div>
           </div>
 
@@ -439,7 +361,7 @@
       </main>
     </div>
 
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script src="script.js?v=nws-proxy-20260612"></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="script.js?v=core-20260618"></script>
   </body>
 </html>
