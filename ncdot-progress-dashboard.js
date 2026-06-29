@@ -4,18 +4,46 @@ const allStatuses = Object.keys(statusMeta);
 const allDivisions = Array.from({ length: 14 }, (_, index) => index + 1);
 const SYNC_STORAGE_KEY = window.PulseDeckSync.storageKey;
 const DAILY_SYNC_HOUR = 2;
+const currencyFormatters = {
+  millions: new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 1,
+  }),
+  billions: new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }),
+};
+const projectSearchText = new Map(
+  projects.map((project) => [
+    project.id,
+    [
+      project.stip,
+      project.contract,
+      project.route,
+      project.county,
+      project.description,
+      project.contractor,
+      project.status,
+    ]
+      .join(" ")
+      .toLowerCase(),
+  ])
+);
 
 let projectFilters = { query: "", status: "all", division: "all" };
 let sortState = { key: "contract", direction: "asc" };
 let syncState = window.PulseDeckSync.read();
 let lastDrawerTrigger = null;
+let dashboardEventsBound = false;
+let dailySyncTimer = 0;
 
 const formatCurrency = (value) =>
-  `${new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: value >= 1000 ? 2 : 1,
-  }).format(value >= 1000 ? value / 1000 : value)}${value >= 1000 ? "B" : "M"}`;
+  value >= 1000
+    ? `${currencyFormatters.billions.format(value / 1000)}B`
+    : `${currencyFormatters.millions.format(value)}M`;
 
 const estimatePercent = (project) =>
   Math.round((project.currentEstimate / project.awardAmount) * 100);
@@ -100,7 +128,9 @@ function performSync(type = "manual") {
 function scheduleDailyAutoRefresh() {
   const nextSync = nextDailySyncDate();
   const delay = Math.max(0, nextSync.getTime() - Date.now());
-  window.setTimeout(() => {
+  if (dailySyncTimer) window.clearTimeout(dailySyncTimer);
+  dailySyncTimer = window.setTimeout(() => {
+    dailySyncTimer = 0;
     performSync("auto");
     scheduleDailyAutoRefresh();
   }, Math.min(delay, 2_147_483_647));
@@ -254,20 +284,7 @@ function renderActivityLog() {
 function sortedFilteredProjects() {
   const query = projectFilters.query.trim().toLowerCase();
   const filtered = projects.filter((project) => {
-    const matchesQuery =
-      !query ||
-      [
-        project.stip,
-        project.contract,
-        project.route,
-        project.county,
-        project.description,
-        project.contractor,
-        project.status,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
+    const matchesQuery = !query || (projectSearchText.get(project.id) || "").includes(query);
     const matchesStatus = projectFilters.status === "all" || project.status === projectFilters.status;
     const matchesDivision =
       projectFilters.division === "all" || project.division === Number(projectFilters.division);
@@ -471,6 +488,9 @@ function resetFilters() {
 }
 
 function bindEvents() {
+  if (dashboardEventsBound) return;
+  dashboardEventsBound = true;
+
   document.addEventListener("click", (event) => {
     if (event.target.closest("[data-close-drawer]")) {
       closeDrawer();

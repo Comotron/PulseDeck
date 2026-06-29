@@ -5,6 +5,26 @@
     lastSyncType: "nightly",
   };
   const TIME_ZONE = "America/New_York";
+  const syncDayFormatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: TIME_ZONE,
+  });
+  const syncTimeFormatter = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+    timeZone: TIME_ZONE,
+  });
+  const clockDayFormatter = new Intl.DateTimeFormat([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const clockTimeFormatter = new Intl.DateTimeFormat([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
   function readSyncState() {
     try {
@@ -16,18 +36,7 @@
 
   function formatSyncDate(dateInput) {
     const date = new Date(dateInput);
-    const day = new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      timeZone: TIME_ZONE,
-    }).format(date);
-    const time = new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZoneName: "short",
-      timeZone: TIME_ZONE,
-    }).format(date);
-    return `${day}, ${time}`;
+    return `${syncDayFormatter.format(date)}, ${syncTimeFormatter.format(date)}`;
   }
 
   function isPreviewRoute() {
@@ -38,6 +47,8 @@
 
   class PulseHeader extends HTMLElement {
     connectedCallback() {
+      if (this.clockTimer) this.disconnectedCallback();
+
       const active = this.getAttribute("active") || "home";
       const root = isPreviewRoute() ? "/preview" : this.getAttribute("root") || ".";
       const homeHref = `${root}/`;
@@ -106,21 +117,16 @@
     }
 
     disconnectedCallback() {
-      window.clearInterval(this.clockTimer);
-      window.removeEventListener("pulsedeck:sync-updated", this.syncHandler);
+      if (this.clockTimer) window.clearInterval(this.clockTimer);
+      if (this.syncHandler) window.removeEventListener("pulsedeck:sync-updated", this.syncHandler);
+      this.clockTimer = 0;
+      this.syncHandler = null;
     }
 
     updateClock() {
       const now = new Date();
-      this.dayElement.textContent = now.toLocaleDateString([], {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      });
-      this.timeElement.textContent = now.toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-      });
+      this.dayElement.textContent = clockDayFormatter.format(now);
+      this.timeElement.textContent = clockTimeFormatter.format(now);
     }
 
     updateSync(state) {
@@ -137,5 +143,5 @@
     read: readSyncState,
   };
 
-  customElements.define("pulse-header", PulseHeader);
+  if (!customElements.get("pulse-header")) customElements.define("pulse-header", PulseHeader);
 })();

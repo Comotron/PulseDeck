@@ -32,6 +32,10 @@ const skyIcons = {
     </svg>`,
 };
 
+let weatherCardCache = new Map();
+let weatherRefreshTimer = 0;
+let weatherRequestSequence = 0;
+
 function refreshIcons() {
   if (window.lucide) window.lucide.createIcons();
 }
@@ -64,12 +68,25 @@ function preservePreviewNavigation() {
 
 function initWeatherCanvas() {
   const refreshButton = document.getElementById("refreshWeather");
+  refreshButton?.removeEventListener("click", loadWeatherCanvas);
   refreshButton?.addEventListener("click", loadWeatherCanvas);
+  cacheWeatherCards();
   loadWeatherCanvas();
-  window.setInterval(loadWeatherCanvas, WEATHER_REFRESH_MS);
+  if (weatherRefreshTimer) window.clearInterval(weatherRefreshTimer);
+  weatherRefreshTimer = window.setInterval(loadWeatherCanvas, WEATHER_REFRESH_MS);
+}
+
+function cacheWeatherCards() {
+  weatherCardCache = new Map(
+    Array.from(document.querySelectorAll(".weather-card[data-city]")).map((card) => [
+      card.dataset.city,
+      card,
+    ])
+  );
 }
 
 async function loadWeatherCanvas() {
+  const requestId = ++weatherRequestSequence;
   const weatherUpdated = document.getElementById("weatherUpdated");
   const refreshButton = document.getElementById("refreshWeather");
 
@@ -81,6 +98,8 @@ async function loadWeatherCanvas() {
   const weatherResults = await Promise.allSettled(
     weatherLocations.map((location) => fetchNwsForecast(location))
   );
+
+  if (requestId !== weatherRequestSequence) return;
 
   weatherResults.forEach((result, index) => {
     const location = weatherLocations[index];
@@ -172,11 +191,13 @@ function renderWeatherError(city, error) {
 }
 
 function findWeatherCard(city) {
-  return document.querySelector(`.weather-card[data-city="${city}"]`);
+  if (!weatherCardCache.size) cacheWeatherCards();
+  return weatherCardCache.get(city);
 }
 
 function setWeatherLoadingState(isLoading) {
-  document.querySelectorAll(".weather-card").forEach((card) => {
+  if (!weatherCardCache.size) cacheWeatherCards();
+  weatherCardCache.forEach((card) => {
     card.classList.toggle("loading", isLoading);
   });
 }
